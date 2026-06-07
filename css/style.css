@@ -620,15 +620,20 @@ body {
 #api-key-banner {
   display: none;
   position: fixed;
-  bottom: 0; left: 0; right: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 600px;
   background: var(--bg-card2);
-  border-top: 1px solid var(--border);
-  padding: 14px 16px;
+  border-top: 2px solid var(--border);
+  border-left: 1px solid var(--border-dim);
+  border-right: 1px solid var(--border-dim);
+  padding: 16px 16px 20px;
   z-index: 200;
   flex-direction: column;
   gap: 10px;
-  max-width: 600px;
-  margin: 0 auto;
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.6);
 }
 
 .api-banner-title {
@@ -771,4 +776,61 @@ body {
   }
   .app-main { padding-top: 0; }
   #refresh-indicator { max-width: 600px; left: 50%; transform: translateX(-50%); }
+}
+
+/* ── Adições / Correções ────────────────────────────────── */
+
+/* Grupo Brasil destacado */
+.group-brasil .group-table-header {
+  background: rgba(201, 162, 39, 0.14);
+  border-bottom-color: rgba(201, 162, 39, 0.4);
+}
+
+/* Botão de fechar no banner: não sobrepõe o título */
+.btn-close-banner { z-index: 1; }
+
+/* ── Botão flutuante de API ──────────────────────────────── */
+#btn-api-config {
+  position: fixed;
+  bottom: 24px;
+  right: 16px;
+  z-index: 190;
+  background: var(--gold);
+  color: #000;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(201,162,39,0.4);
+  transition: background 0.2s, transform 0.15s;
+}
+#btn-api-config:hover { background: var(--gold-light); transform: scale(1.05); }
+#btn-api-config.has-key {
+  background: var(--green);
+  box-shadow: 0 4px 16px rgba(9,209,122,0.3);
+}
+
+/* Ícone de spin no refresh */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── SofaScore status ───────────────────────────────────── */
+.demo-notice {
+  background: rgba(201, 162, 39, 0.06);
+  border: 1px dashed rgba(201, 162, 39, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-sec);
+  text-align: center;
 }
