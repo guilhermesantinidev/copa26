@@ -1,13 +1,10 @@
 // =============================================
-// COPA DO MUNDO 2026 — Service Worker
-// Compatível com GitHub Pages (/repo/) e root (/)
-// Estratégia: Cache First para assets estáticos
-//             Network First para dados dinâmicos
+// COPA DO MUNDO 2026 — Service Worker v4
+// Cache First para assets · Network First para API
+// Push notifications para jogos do Brasil
 // =============================================
 
-const CACHE_NAME = 'copa2026-v3';
-
-// Detecta automaticamente o base path (ex: /copa2026/ no GitHub Pages)
+const CACHE_NAME = 'copa2026-v4';
 const BASE = self.location.pathname.replace('/sw.js', '');
 
 const ASSETS = [
@@ -17,10 +14,11 @@ const ASSETS = [
   BASE + '/js/data.js',
   BASE + '/js/app.js',
   BASE + '/manifest.json',
+  BASE + '/icons/icon-192.png',
   'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap',
 ];
 
-// Install — cache assets estáticos
+// ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -31,7 +29,7 @@ self.addEventListener('install', e => {
   );
 });
 
-// Activate — limpa caches antigos
+// ── Activate — limpa caches antigos ──────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -42,24 +40,28 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch
+// ── Fetch ─────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-
-  // Ignora requisições não-GET
   if (e.request.method !== 'GET') return;
 
-  // Sempre network para a API externa (dados ao vivo)
-  if (url.hostname.includes('rapidapi') || url.hostname.includes('api-football')) {
+  // Sempre network para APIs externas
+  if (
+    url.hostname.includes('sofascore') ||
+    url.hostname.includes('rapidapi') ||
+    url.hostname.includes('corsproxy') ||
+    url.hostname.includes('allorigins') ||
+    url.hostname.includes('thingproxy')
+  ) {
     e.respondWith(
-      fetch(e.request).catch(() => new Response('{"error":"offline"}', {
-        headers: { 'Content-Type': 'application/json' }
-      }))
+      fetch(e.request).catch(() =>
+        new Response('{"error":"offline"}', { headers: { 'Content-Type': 'application/json' } })
+      )
     );
     return;
   }
 
-  // Cache first para assets estáticos (mesmo origin + fontes Google)
+  // Cache first para assets estáticos + fontes Google
   if (url.origin === location.origin || url.hostname.includes('fonts.')) {
     e.respondWith(
       caches.match(e.request).then(cached => {
@@ -71,6 +73,7 @@ self.addEventListener('fetch', e => {
           }
           return response;
         }).catch(() => {
+          // Fallback para navegação offline: serve index.html cacheado
           if (e.request.mode === 'navigate') {
             return caches.match(BASE + '/index.html');
           }
@@ -83,5 +86,35 @@ self.addEventListener('fetch', e => {
   // Network first para todo o resto
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
+  );
+});
+
+// ── Push Notifications ────────────────────────────────────────
+self.addEventListener('push', e => {
+  let data = { title: '⚽ Copa do Mundo 2026', body: 'Atualização de jogo!', tag: 'copa-update' };
+  try { Object.assign(data, e.data?.json()); } catch (_) {}
+
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body:    data.body,
+      icon:    BASE + '/icons/icon-192.png',
+      badge:   BASE + '/icons/icon-192.png',
+      tag:     data.tag || 'copa-update',
+      renotify: true,
+      data:    { url: BASE + '/' },
+    })
+  );
+});
+
+// ── Clique na notificação → abre o app ───────────────────────
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = e.notification.data?.url || BASE + '/';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(BASE));
+      if (existing) return existing.focus();
+      return clients.openWindow(target);
+    })
   );
 });

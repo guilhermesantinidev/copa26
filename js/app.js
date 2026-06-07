@@ -78,6 +78,12 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchSofaScore(); // depois tenta dados reais em background
   startAutoRefresh();
   showTab('ao-vivo');
+
+  // Novas funcionalidades
+  renderBrasilWidget();
+  setInterval(renderBrasilWidget, 30_000);
+  initNotifBanner();
+  initSearchKeyboard();
 });
 
 // ── Fetch principal ───────────────────────────────────────────
@@ -339,6 +345,7 @@ function renderAll() {
   renderCalendar();
   renderResults();
   renderGroups();
+  renderBrasilWidget();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
@@ -489,6 +496,12 @@ function renderMatchCard(m) {
       </div>
     </div>
     ${localTimeHtml}
+    <div class="match-card-footer">
+      <button class="share-btn" onclick="shareMatch('${m.id}')" aria-label="Compartilhar jogo">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Compartilhar
+      </button>
+    </div>
   </div>`;
 }
 
@@ -649,4 +662,251 @@ function showToast(msg) {
   toast.textContent = msg;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3500);
+}
+
+// ══════════════════════════════════════════════════════════════
+// #10 — WIDGET BRASIL
+// ══════════════════════════════════════════════════════════════
+function renderBrasilWidget() {
+  const widget = document.getElementById('brasil-widget');
+  const inner  = document.getElementById('widget-inner');
+  if (!widget || !inner) return;
+
+  const allMatches = [...state.matches, ...state.liveMatches];
+
+  // Procura jogo ao vivo do Brasil primeiro
+  let match = allMatches.find(m =>
+    m.highlight && m.status === 'live'
+  );
+
+  // Se não há ao vivo, pega o próximo jogo futuro
+  if (!match) {
+    const now = new Date().toISOString().slice(0, 10);
+    match = allMatches
+      .filter(m => m.highlight && m.status === 'upcoming')
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0];
+  }
+
+  // Se não há próximo (Copa terminou ou sem dados), oculta widget
+  if (!match) {
+    widget.style.display = 'none';
+    document.body.classList.add('no-widget');
+    return;
+  }
+
+  widget.style.display = 'flex';
+  document.body.classList.remove('no-widget');
+
+  const isLive     = match.status === 'live';
+  const isFinished = match.status === 'finished';
+  const isBrasil   = (name) => /brasil|brazil/i.test(name);
+
+  // Destaca o lado do Brasil
+  const homeClass = isBrasil(match.home.name) ? 'style="color:var(--green)"' : '';
+  const awayClass = isBrasil(match.away.name) ? 'style="color:var(--green)"' : '';
+
+  let centerHtml;
+  if (match.score) {
+    centerHtml = `
+      <div class="widget-score-box ${isLive ? 'is-live' : ''}">
+        <span class="widget-score-num">${match.score.home}</span>
+        <span class="widget-score-sep">–</span>
+        <span class="widget-score-num">${match.score.away}</span>
+      </div>
+      ${isLive ? `<div class="widget-minute"><span class="pulse-dot" style="display:inline-block;margin-right:4px"></span>${match.minute || 'AO VIVO'}</div>` : ''}`;
+  } else {
+    const dateLabel = (() => {
+      const today    = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      if (match.date === today)    return 'Hoje';
+      if (match.date === tomorrow) return 'Amanhã';
+      const d = new Date(match.date + 'T12:00:00');
+      return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+    })();
+    centerHtml = `
+      <div class="widget-time-box">
+        <span class="widget-time">${match.time}</span>
+        <span class="widget-date">${dateLabel} · BRT</span>
+      </div>`;
+  }
+
+  inner.innerHTML = `
+    <div class="widget-team">
+      <span class="widget-flag">${match.home.flag}</span>
+      <span class="widget-name" ${homeClass}>${match.home.name}</span>
+    </div>
+    ${centerHtml}
+    <div class="widget-team away">
+      <span class="widget-name" ${awayClass}>${match.away.name}</span>
+      <span class="widget-flag">${match.away.flag}</span>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// #8 — BUSCA GLOBAL
+// ══════════════════════════════════════════════════════════════
+function openSearch() {
+  const overlay = document.getElementById('search-overlay');
+  if (!overlay) return;
+  overlay.classList.add('open');
+  setTimeout(() => document.getElementById('search-input')?.focus(), 80);
+}
+
+function closeSearch() {
+  document.getElementById('search-overlay')?.classList.remove('open');
+  clearSearch();
+}
+
+function clearSearch() {
+  const input = document.getElementById('search-input');
+  if (input) input.value = '';
+  document.getElementById('search-clear')?.classList.remove('visible');
+  document.getElementById('search-results').innerHTML = `
+    <div class="search-hint">
+      <div class="hint-icon">🔍</div>
+      <p>Digite o nome de um time,<br>cidade ou data</p>
+    </div>`;
+}
+
+function initSearchKeyboard() {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSearch();
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openSearch(); }
+  });
+}
+
+function handleSearch(query) {
+  const clearBtn = document.getElementById('search-clear');
+  if (clearBtn) clearBtn.classList.toggle('visible', query.length > 0);
+
+  const results = document.getElementById('search-results');
+  if (!results) return;
+
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) {
+    clearSearch();
+    return;
+  }
+
+  const allMatches = [...state.matches].filter(m => {
+    return (
+      m.home.name.toLowerCase().includes(q) ||
+      m.away.name.toLowerCase().includes(q) ||
+      (m.city  || '').toLowerCase().includes(q) ||
+      (m.venue || '').toLowerCase().includes(q) ||
+      m.date.includes(q) ||
+      formatDateLabel(m.date).toLowerCase().includes(q)
+    );
+  }).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  if (!allMatches.length) {
+    results.innerHTML = `<div class="search-no-results">😕 Nenhum jogo encontrado para "<strong>${query}</strong>"</div>`;
+    return;
+  }
+
+  const byDate = {};
+  allMatches.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
+
+  results.innerHTML = Object.keys(byDate).sort().map(date =>
+    `<div class="date-group">
+      <div class="date-label">${formatDateLabel(date)}</div>
+      ${byDate[date].map(renderMatchCard).join('')}
+    </div>`
+  ).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// #9 — NOTIFICAÇÕES PUSH
+// ══════════════════════════════════════════════════════════════
+const NOTIF_KEY       = 'copa26_notif';
+const NOTIF_DISMISSED = 'copa26_notif_dismissed';
+
+function initNotifBanner() {
+  // Só mostra se: suporte existe, permissão ainda não decidida, usuário não dispensou
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'default') return;
+  if (sessionStorage.getItem(NOTIF_DISMISSED)) return;
+
+  // Mostra o banner depois de 4 segundos (não agride logo de cara)
+  setTimeout(() => {
+    document.getElementById('notif-banner')?.classList.add('visible');
+  }, 4000);
+}
+
+async function requestNotifPermission() {
+  document.getElementById('notif-banner')?.classList.remove('visible');
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      localStorage.setItem(NOTIF_KEY, '1');
+      showToast('🔔 Notificações ativadas! Você será avisado sobre jogos do Brasil.');
+      scheduleMatchNotifications();
+    } else {
+      showToast('Notificações não permitidas pelo navegador.');
+    }
+  } catch (err) {
+    console.warn('[Notif]', err);
+  }
+}
+
+function dismissNotifBanner() {
+  document.getElementById('notif-banner')?.classList.remove('visible');
+  sessionStorage.setItem(NOTIF_DISMISSED, '1');
+}
+
+function scheduleMatchNotifications() {
+  if (Notification.permission !== 'granted') return;
+
+  const brasilMatches = state.matches.filter(m =>
+    m.highlight && m.status === 'upcoming'
+  );
+
+  brasilMatches.forEach(m => {
+    const matchTime = new Date(`${m.date}T${m.time}:00-03:00`).getTime();
+    const notify15  = matchTime - 15 * 60 * 1000; // 15 min antes
+    const now       = Date.now();
+
+    if (notify15 > now) {
+      const delay = notify15 - now;
+      setTimeout(() => {
+        new Notification('⚽ Brasil joga em 15 minutos!', {
+          body: `${m.home.flag} ${m.home.name} × ${m.away.name} ${m.away.flag} · ${m.time} BRT`,
+          icon: 'icons/icon-192.png',
+          tag:  `match-${m.id}`,
+        });
+      }, delay);
+    }
+  });
+}
+
+// Re-agenda notificações quando dados reais chegam
+const _origFetchAll = fetchAllMatches;
+// (hook leve — scheduleMatchNotifications já verifica permissão)
+function maybeRescheduleNotif() {
+  if (localStorage.getItem(NOTIF_KEY) === '1') scheduleMatchNotifications();
+}
+
+// ══════════════════════════════════════════════════════════════
+// #11 — COMPARTILHAMENTO NATIVO
+// ══════════════════════════════════════════════════════════════
+function shareMatch(matchId) {
+  const m = [...state.matches, ...state.liveMatches].find(x => String(x.id) === String(matchId));
+  if (!m) return;
+
+  const scoreStr = m.score
+    ? `${m.score.home}–${m.score.away}`
+    : m.time + ' BRT';
+
+  const text = `${m.home.flag} ${m.home.name} ${scoreStr} ${m.away.name} ${m.away.flag}\n📅 ${formatDateLabel(m.date)} · ${m.city || m.venue}\n\n🏆 Copa do Mundo 2026`;
+  const url  = window.location.href.split('?')[0];
+
+  if (navigator.share) {
+    navigator.share({ title: 'Copa do Mundo 2026', text, url }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(text + '\n' + url).then(() => {
+      showToast('📋 Copiado para a área de transferência!');
+    }).catch(() => {
+      showToast('Compartilhamento não suportado neste navegador.');
+    });
+  }
 }

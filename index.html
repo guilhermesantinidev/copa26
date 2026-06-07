@@ -12,11 +12,12 @@
   <meta property="og:title" content="Copa do Mundo 2026" />
   <meta property="og:description" content="Calendário, resultados e placar ao vivo — FIFA World Cup 2026" />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="icons/og-image.png" />
+  <meta property="og:url" content="https://seu-usuario.github.io/copa2026/" />
+  <meta property="og:image" content="https://seu-usuario.github.io/copa2026/icons/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="icons/og-image.png" />
+  <meta name="twitter:image" content="https://seu-usuario.github.io/copa2026/icons/og-image.png" />
   <title>Copa do Mundo 2026</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -38,6 +39,9 @@
         </div>
       </div>
       <div class="header-meta">
+        <button id="search-btn" aria-label="Buscar jogos" onclick="openSearch()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
         <span class="live-badge" id="live-indicator" style="display:none">
           <span class="live-dot"></span>AO VIVO
         </span>
@@ -52,6 +56,33 @@
 
   <!-- Loading bar -->
   <div id="refresh-indicator"></div>
+
+  <!-- #10 Widget Brasil fixo -->
+  <div id="brasil-widget" aria-label="Próximo jogo do Brasil">
+    <span class="widget-label">🇧🇷 BRASIL</span>
+    <div class="widget-inner" id="widget-inner">
+      <!-- preenchido por JS -->
+    </div>
+  </div>
+
+  <!-- #8 Search overlay -->
+  <div id="search-overlay" role="dialog" aria-label="Buscar jogos" onclick="closeSearch()">
+    <div class="search-header" onclick="event.stopPropagation()">
+      <div class="search-input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search-input" type="search" placeholder="Time, data, estádio…" autocomplete="off"
+          oninput="handleSearch(this.value)" />
+        <button id="search-clear" onclick="clearSearch()" aria-label="Limpar">✕</button>
+      </div>
+      <button class="search-cancel" onclick="closeSearch()">Cancelar</button>
+    </div>
+    <div class="search-results" id="search-results" onclick="event.stopPropagation()">
+      <div class="search-hint">
+        <div class="hint-icon">🔍</div>
+        <p>Digite o nome de um time,<br>cidade ou data</p>
+      </div>
+    </div>
+  </div>
 
   <!-- Navigation Tabs -->
   <nav class="main-nav" role="navigation" aria-label="Seções do app">
@@ -75,6 +106,13 @@
 
   <!-- Main Content -->
   <main class="app-main">
+
+    <!-- #9 Banner de notificações -->
+    <div id="notif-banner">
+      <div class="notif-text"><strong>Ativar notificações?</strong><br>Avise quando o Brasil jogar ou marcar um gol.</div>
+      <button class="notif-allow" onclick="requestNotifPermission()">Ativar</button>
+      <button class="notif-dismiss" onclick="dismissNotifBanner()" aria-label="Fechar">✕</button>
+    </div>
 
     <!-- Last update timestamp -->
     <div id="last-update"></div>
@@ -210,6 +248,26 @@
           .catch(e => console.error('[SW] Erro:', e));
       });
     }
+  </script>
+
+  <!-- Corrige URLs do Open Graph para o domínio real em tempo de execução -->
+  <script>
+    (function () {
+      const base = window.location.origin + window.location.pathname.replace(/\/$/, '');
+      ['og:url', 'og:image', 'twitter:image'].forEach(name => {
+        const sel = name.startsWith('og:')
+          ? `meta[property="${name}"]`
+          : `meta[name="${name}"]`;
+        const el = document.querySelector(sel);
+        if (!el) return;
+        const content = el.getAttribute('content');
+        if (content && content.includes('seu-usuario')) {
+          el.setAttribute('content',
+            content.replace('https://seu-usuario.github.io/copa2026', base)
+          );
+        }
+      });
+    })();
   </script>
 </body>
 </html>
