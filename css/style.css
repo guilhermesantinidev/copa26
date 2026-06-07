@@ -834,3 +834,47 @@ body {
   color: var(--text-sec);
   text-align: center;
 }
+/* ── Horário local da sede ──────────────────────────────── */
+.match-local-time {
+  font-size: 11px;
+  color: var(--text-sec);
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-dim);
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
+.match-local-time abbr {
+  text-decoration: none;
+  border-bottom: 1px dotted var(--text-sec);
+  cursor: help;
+}
+
+/* ── Empty state Resultados ─────────────────────────────── */
+.empty-results .empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  animation: bounce 1.4s infinite;
+}
+
+.empty-results p {
+  font-size: 15px;
+  color: var(--text-pri);
+  margin-bottom: 6px;
+}
+
+.empty-results .empty-sub {
+  font-size: 13px;
+  color: var(--text-sec);
+  margin-top: 4px;
+}
+
+.empty-results strong {
+  color: var(--gold);
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}

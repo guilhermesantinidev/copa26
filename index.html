@@ -12,6 +12,11 @@
   <meta property="og:title" content="Copa do Mundo 2026" />
   <meta property="og:description" content="Calendário, resultados e placar ao vivo — FIFA World Cup 2026" />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="icons/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="icons/og-image.png" />
   <title>Copa do Mundo 2026</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -110,6 +115,57 @@
             <option value="J">Grupo J</option>
             <option value="K">Grupo K</option>
             <option value="L">Grupo L</option>
+          </select>
+          <select id="team-filter" class="filter-select" onchange="renderCalendar()">
+            <option value="todos">Todas as seleções</option>
+            <option value="Brasil">🇧🇷 Brasil</option>
+            <option value="Argentina">🇦🇷 Argentina</option>
+            <option value="França">🇫🇷 França</option>
+            <option value="Alemanha">🇩🇪 Alemanha</option>
+            <option value="Espanha">🇪🇸 Espanha</option>
+            <option value="Portugal">🇵🇹 Portugal</option>
+            <option value="Inglaterra">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra</option>
+            <option value="Holanda">🇳🇱 Holanda</option>
+            <option value="Bélgica">🇧🇪 Bélgica</option>
+            <option value="Croácia">🇭🇷 Croácia</option>
+            <option value="Marrocos">🇲🇦 Marrocos</option>
+            <option value="Senegal">🇸🇳 Senegal</option>
+            <option value="Japão">🇯🇵 Japão</option>
+            <option value="Coreia do Sul">🇰🇷 Coreia do Sul</option>
+            <option value="México">🇲🇽 México</option>
+            <option value="EUA">🇺🇸 EUA</option>
+            <option value="Canadá">🇨🇦 Canadá</option>
+            <option value="Equador">🇪🇨 Equador</option>
+            <option value="Uruguai">🇺🇾 Uruguai</option>
+            <option value="Colômbia">🇨🇴 Colômbia</option>
+            <option value="Paraguai">🇵🇾 Paraguai</option>
+            <option value="Suíça">🇨🇭 Suíça</option>
+            <option value="Dinamarca">🇩🇰 Dinamarca</option>
+            <option value="Noruega">🇳🇴 Noruega</option>
+            <option value="Turquia">🇹🇷 Turquia</option>
+            <option value="Ucrânia">🇺🇦 Ucrânia</option>
+            <option value="Itália">🇮🇹 Itália</option>
+            <option value="Austrália">🇦🇺 Austrália</option>
+            <option value="Catar">🇶🇦 Catar</option>
+            <option value="Arábia Saudita">🇸🇦 Arábia Saudita</option>
+            <option value="Irã">🇮🇷 Irã</option>
+            <option value="Egito">🇪🇬 Egito</option>
+            <option value="Tunísia">🇹🇳 Tunísia</option>
+            <option value="Gana">🇬🇭 Gana</option>
+            <option value="África do Sul">🇿🇦 África do Sul</option>
+            <option value="Costa do Marfim">🇨🇮 Costa do Marfim</option>
+            <option value="Escócia">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Escócia</option>
+            <option value="Haiti">🇭🇹 Haiti</option>
+            <option value="Cabo Verde">🇨🇻 Cabo Verde</option>
+            <option value="Jordânia">🇯🇴 Jordânia</option>
+            <option value="Iraque">🇮🇶 Iraque</option>
+            <option value="Uzbequistão">🇺🇿 Uzbequistão</option>
+            <option value="Rep. D. Congo">🇨🇩 Rep. D. Congo</option>
+            <option value="Panamá">🇵🇦 Panamá</option>
+            <option value="Curaçao">🇨🇼 Curaçao</option>
+            <option value="Argélia">🇩🇿 Argélia</option>
+            <option value="Áustria">🇦🇹 Áustria</option>
+            <option value="Nova Zelândia">🇳🇿 Nova Zelândia</option>
           </select>
         </div>
       </div>

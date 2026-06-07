@@ -25,7 +25,36 @@ const CORS_PROXIES = [
   'https://thingproxy.freeboard.io/fetch/',
 ];
 
-// ── Estado Global ────────────────────────────────────────────
+// ── Mapa de fusos por cidade/estádio ─────────────────────────
+const VENUE_TZ = {
+  // EUA
+  'Nova York / NJ': 'America/New_York', 'New York':     'America/New_York',
+  'Boston':         'America/New_York', 'Philadelphia':  'America/New_York',
+  'Miami':          'America/New_York',
+  'Dallas':         'America/Chicago',  'Kansas City':   'America/Chicago',
+  'Houston':        'America/Chicago',  'Atlanta':       'America/New_York',
+  'Los Angeles':    'America/Los_Angeles', 'Pasadena':   'America/Los_Angeles',
+  'San Francisco':  'America/Los_Angeles', 'Seattle':    'America/Los_Angeles',
+  'Denver':         'America/Denver',
+  // Canadá
+  'Toronto':        'America/Toronto',  'Vancouver':     'America/Vancouver',
+  // México
+  'Cidade do México': 'America/Mexico_City', 'Guadalajara': 'America/Mexico_City',
+  'Monterrey':      'America/Monterrey',
+};
+
+const TZ_LABEL = {
+  'America/New_York':    'ET',
+  'America/Chicago':     'CT',
+  'America/Denver':      'MT',
+  'America/Los_Angeles': 'PT',
+  'America/Toronto':     'ET',
+  'America/Vancouver':   'PT',
+  'America/Mexico_City': 'CT',
+  'America/Monterrey':   'CT',
+};
+
+
 const state = {
   matches:       [],
   liveMatches:   [],
@@ -411,16 +440,34 @@ function renderMatchCard(m) {
        </div>`
     : `<div class="score-display score-upcoming">
         <span class="match-time">${m.time}</span>
-        <span class="match-tz">${m.timezone}</span>
+        <span class="match-tz">BRT</span>
        </div>`;
 
   const statusBadge = isLive
     ? `<span class="badge badge-live"><span class="pulse-dot"></span>${m.minute || 'AO VIVO'}</span>`
     : isFinished
     ? `<span class="badge badge-done">FT</span>`
-    : `<span class="badge badge-upcoming">${m.time} BRT</span>`;
+    : `<span class="badge badge-upcoming">${m.time} <abbr title="Horário de Brasília">BRT</abbr></span>`;
 
   const groupLabel = m.group ? `Grupo ${m.group}` : (m.phase || '');
+
+  // Linha de horário local da sede (apenas para jogos futuros)
+  const localTimeHtml = (!m.score && m.date && m.time)
+    ? (() => {
+        try {
+          const tz = VENUE_TZ[m.city] || VENUE_TZ[m.venue] || null;
+          if (!tz) return '';
+          const [h, min] = m.time.split(':').map(Number);
+          // Cria um Date no dia/hora BRT e converte para o fuso da sede
+          const brtDate = new Date(`${m.date}T${m.time}:00-03:00`);
+          const localStr = brtDate.toLocaleTimeString('pt-BR', {
+            timeZone: tz, hour: '2-digit', minute: '2-digit',
+          });
+          const tzLabel = TZ_LABEL[tz] || tz;
+          return `<div class="match-local-time">🌎 ${localStr} horário local (${tzLabel})</div>`;
+        } catch { return ''; }
+      })()
+    : '';
 
   return `<div class="match-card ${isBrasil ? 'match-brazil' : ''} ${isLive ? 'match-live-card' : ''}">
     <div class="match-card-top">
@@ -441,6 +488,7 @@ function renderMatchCard(m) {
         <span class="team-flag">${m.away.flag}</span>
       </div>
     </div>
+    ${localTimeHtml}
   </div>`;
 }
 
@@ -451,6 +499,7 @@ function renderCalendar() {
 
   const phaseFilter = document.getElementById('phase-filter')?.value || 'todos';
   const groupFilter = document.getElementById('group-filter')?.value || 'todos';
+  const teamFilter  = document.getElementById('team-filter')?.value  || 'todos';
 
   let matches = [...state.matches].sort((a, b) =>
     a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time)
@@ -458,6 +507,9 @@ function renderCalendar() {
 
   if (phaseFilter !== 'todos') matches = matches.filter(m => m.phase === phaseFilter);
   if (groupFilter !== 'todos') matches = matches.filter(m => m.group === groupFilter);
+  if (teamFilter  !== 'todos') matches = matches.filter(m =>
+    m.home.name === teamFilter || m.away.name === teamFilter
+  );
 
   if (!matches.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">🗓️</div><p>Nenhum jogo encontrado</p></div>`;
@@ -483,10 +535,17 @@ function renderResults() {
   const finished = state.matches.filter(m => m.status === 'finished');
 
   if (!finished.length) {
-    container.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">⏳</div>
-      <p>Nenhum resultado ainda</p>
-      <p class="empty-sub">Os resultados aparecerão aqui após os jogos</p>
+    const now       = new Date();
+    const diff      = COPA_START - now;
+    const daysLeft  = diff > 0 ? Math.ceil(diff / 86400000) : 0;
+    const msg = diff > 0
+      ? `A Copa começa em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong> — em ${daysLeft === 4 ? 'breve' : '11 de junho'}!`
+      : 'Os primeiros resultados aparecem aqui após cada jogo.';
+    container.innerHTML = `<div class="empty-state empty-results">
+      <div class="empty-icon">⚽</div>
+      <p>${msg}</p>
+      <p class="empty-sub">Abertura: 11 jun · Azteca · Cidade do México</p>
+      <p class="empty-sub">Brasil estreia: <strong>13 jun × Marrocos</strong> · MetLife Stadium</p>
     </div>`;
     return;
   }
