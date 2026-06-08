@@ -747,9 +747,12 @@ function renderBrasilWidget() {
 // ══════════════════════════════════════════════════════════════
 function openSearch() {
   const overlay = document.getElementById('search-overlay');
-  if (!overlay) return;
+  const input   = document.getElementById('search-input');
+  if (!overlay || !input) return;
   overlay.classList.add('open');
-  setTimeout(() => document.getElementById('search-input')?.focus(), 80);
+  // iOS Safari só abre o teclado se focus() for chamado de forma SÍNCRONA
+  // dentro do evento de toque/clique do usuário — setTimeout quebra essa cadeia.
+  input.focus();
 }
 
 function closeSearch() {
@@ -784,7 +787,12 @@ function handleSearch(query) {
 
   const q = query.trim().toLowerCase();
   if (q.length < 2) {
-    clearSearch();
+    // Mostra hint sem apagar o input
+    results.innerHTML = `
+      <div class="search-hint">
+        <div class="hint-icon">🔍</div>
+        <p>Digite o nome de um time,<br>cidade ou data</p>
+      </div>`;
     return;
   }
 
