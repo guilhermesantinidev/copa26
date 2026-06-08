@@ -5,6 +5,8 @@
 // Atualização automática a cada 60s (30s durante jogos ao vivo)
 // ============================================================
 
+const FAVS_KEY = 'copa26_favs';
+
 const SOFA = {
   base:       'https://api.sofascore.com/api/v1',
   tourneyId:  77,      // FIFA World Cup
@@ -65,7 +67,9 @@ const state = {
   isLive:        false,
   usingDemo:     true,
   loading:       false,
-  proxyIndex:    0,   // qual proxy está funcionando
+  proxyIndex:    0,
+  prevScores:    {},   // { matchId: { home, away } } — detecta gols
+  favTeams:      new Set(JSON.parse(localStorage.getItem('copa26_favs') || '[]')),
 };
 
 // ── Init ─────────────────────────────────────────────────────
@@ -84,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(renderBrasilWidget, 30_000);
   initNotifBanner();
   initSearchKeyboard();
+  initFavsModal();
 });
 
 // ── Fetch principal ───────────────────────────────────────────
@@ -183,13 +188,35 @@ async function fetchLiveAndToday() {
   const today2 = (todayData.events || []).filter(isWC).map(normalizeSofa);
 
   const liveIds = new Set(live.map(m => m.id));
-  state.liveMatches = [...live, ...today2.filter(m => !liveIds.has(m.id))];
+  const newLiveMatches = [...live, ...today2.filter(m => !liveIds.has(m.id))];
+
+  // Detecta gols comparando com placares anteriores
+  const goalEvents = [];
+  newLiveMatches.forEach(m => {
+    if (!m.score) return;
+    const prev = state.prevScores[m.id];
+    if (prev && (m.score.home !== prev.home || m.score.away !== prev.away)) {
+      goalEvents.push(m.id);
+    }
+    state.prevScores[m.id] = { home: m.score.home, away: m.score.away };
+  });
+
+  state.liveMatches = newLiveMatches;
   state.isLive = live.length > 0;
 
   const indicator = document.getElementById('live-indicator');
   if (indicator) indicator.style.display = state.isLive ? 'flex' : 'none';
 
   renderLiveTab();
+
+  // Dispara animação nos cards com gol
+  if (goalEvents.length) {
+    goalEvents.forEach(id => {
+      triggerGoalAnimation(id);
+      const m = state.liveMatches.find(x => String(x.id) === String(id));
+      if (m) gaEvent('goal_detected', { match: m.home.name + ' x ' + m.away.name, score: m.score.home + '-' + m.score.away });
+    });
+  }
 }
 
 // ── Todos os jogos do torneio ─────────────────────────────────
@@ -351,6 +378,7 @@ function renderAll() {
 // ── Tabs ──────────────────────────────────────────────────────
 function showTab(tab) {
   state.activeTab = tab;
+  gaEvent('tab_view', { tab_name: tab });
   document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
@@ -364,14 +392,34 @@ function renderLiveTab() {
 
   let html = '';
 
+  const hasFavs = state.favTeams.size > 0;
+
   if (state.usingDemo) {
     html += renderCountdownCard();
+    if (hasFavs) {
+      const favMatches = DEMO_MATCHES.filter(m =>
+        state.favTeams.has(m.home.name) || state.favTeams.has(m.away.name)
+      );
+      if (favMatches.length) html += renderMatchSection('⭐ Meus Times', favMatches);
+    }
     html += renderMatchSection('📅 Jogos do Brasil na Copa 2026', DEMO_MATCHES.filter(m => m.highlight));
     html += `<div class="demo-notice">📡 Aguardando conexão com SofaScore para dados ao vivo…</div>`;
   } else {
     const live     = state.liveMatches.filter(m => m.status === 'live');
     const upcoming = state.liveMatches.filter(m => m.status === 'upcoming');
     const finished = state.liveMatches.filter(m => m.status === 'finished');
+
+    if (hasFavs) {
+      const favLive = live.filter(m =>
+        state.favTeams.has(m.home.name) || state.favTeams.has(m.away.name)
+      );
+      const favUpcoming = upcoming.filter(m =>
+        state.favTeams.has(m.home.name) || state.favTeams.has(m.away.name)
+      );
+      if (favLive.length || favUpcoming.length) {
+        html += renderMatchSection('⭐ Meus Times', [...favLive, ...favUpcoming]);
+      }
+    }
 
     if (live.length)     html += renderMatchSection('🔴 Ao Vivo Agora', live);
     if (upcoming.length) html += renderMatchSection('📅 Hoje — Próximos', upcoming);
@@ -476,7 +524,7 @@ function renderMatchCard(m) {
       })()
     : '';
 
-  return `<div class="match-card ${isBrasil ? 'match-brazil' : ''} ${isLive ? 'match-live-card' : ''}">
+  return `<div class="match-card ${isBrasil ? 'match-brazil' : ''} ${isLive ? 'match-live-card' : ''}" data-match-id="${m.id}">
     <div class="match-card-top">
       <div class="match-meta">
         <span class="group-badge">${groupLabel}</span>
@@ -786,6 +834,7 @@ function handleSearch(query) {
   if (!results) return;
 
   const q = query.trim().toLowerCase();
+  if (q.length === 2) gaEvent('search', { search_term: q });
   if (q.length < 2) {
     // Mostra hint sem apagar o input
     results.innerHTML = `
@@ -908,6 +957,7 @@ function shareMatch(matchId) {
   const text = `${m.home.flag} ${m.home.name} ${scoreStr} ${m.away.name} ${m.away.flag}\n📅 ${formatDateLabel(m.date)} · ${m.city || m.venue}\n\n🏆 Copa do Mundo 2026`;
   const url  = window.location.href.split('?')[0];
 
+  gaEvent('share_match', { match_id: String(matchId), teams: m.home.name + ' x ' + m.away.name });
   if (navigator.share) {
     navigator.share({ title: 'Copa do Mundo 2026', text, url }).catch(() => {});
   } else {
@@ -917,4 +967,111 @@ function shareMatch(matchId) {
       showToast('Compartilhamento não suportado neste navegador.');
     });
   }
+}
+// ══════════════════════════════════════════════════════════════
+// FAVORITAR SELEÇÕES
+// ══════════════════════════════════════════════════════════════
+
+function loadFavs() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAVS_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function saveFavs() {
+  localStorage.setItem(FAVS_KEY, JSON.stringify([...state.favTeams]));
+}
+
+function toggleFav(teamName) {
+  if (state.favTeams.has(teamName)) {
+    state.favTeams.delete(teamName);
+    gaEvent('unfavorite_team', { team: teamName });
+  } else {
+    state.favTeams.add(teamName);
+    gaEvent('favorite_team', { team: teamName });
+  }
+  saveFavs();
+  renderFavsModal();
+  renderLiveTab();
+  renderBrasilWidget();
+}
+
+// Abre modal de seleção de favoritos
+function openFavsModal() {
+  document.getElementById('favs-modal')?.classList.add('open');
+}
+
+function closeFavsModal() {
+  document.getElementById('favs-modal')?.classList.remove('open');
+}
+
+function renderFavsModal() {
+  const grid = document.getElementById('favs-grid');
+  if (!grid) return;
+
+  // Coleta todos os times dos grupos
+  const allTeams = [];
+  Object.keys(GROUPS).sort().forEach(g => {
+    GROUPS[g].teams.forEach((team, i) => {
+      allTeams.push({ name: team, flag: GROUPS[g].flags[i], group: g });
+    });
+  });
+
+  grid.innerHTML = allTeams.map(t => {
+    const isFav = state.favTeams.has(t.name);
+    return `<button class="fav-team-btn ${isFav ? 'is-fav' : ''}" onclick="toggleFav('${t.name.replace(/'/g, "\\'")}')">
+      <span class="fav-flag">${t.flag}</span>
+      <span class="fav-name">${t.name}</span>
+      ${isFav ? '<span class="fav-check">★</span>' : ''}
+    </button>`;
+  }).join('');
+
+  // Atualiza contador no botão
+  const count = state.favTeams.size;
+  const badge = document.getElementById('favs-count');
+  if (badge) {
+    badge.textContent = count > 0 ? count : '';
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  }
+}
+
+// Inicializa modal ao carregar
+function initFavsModal() {
+  renderFavsModal();
+}
+
+// ══════════════════════════════════════════════════════════════
+// ANIMAÇÃO DE GOL
+// ══════════════════════════════════════════════════════════════
+function triggerGoalAnimation(matchId) {
+  const card = document.querySelector(`[data-match-id="${matchId}"]`);
+  if (!card) return;
+
+  // Evita duplicar se já está animando
+  if (card.classList.contains('goal-flash')) return;
+
+  // Cria overlay de gol dentro do card
+  const overlay = document.createElement('div');
+  overlay.className = 'goal-overlay';
+  overlay.innerHTML = `
+    <span class="goal-emoji">⚽</span>
+    <span class="goal-text">GOL!</span>
+  `;
+  card.appendChild(overlay);
+  card.classList.add('goal-flash');
+
+  // Remove após a animação
+  setTimeout(() => {
+    card.classList.remove('goal-flash');
+    overlay.remove();
+  }, 2800);
+
+  // Toast também
+  showToast('⚽ GOL!');
+}
+
+// ══════════════════════════════════════════════════════════════
+// GOOGLE ANALYTICS — Eventos customizados
+// ══════════════════════════════════════════════════════════════
+function gaEvent(name, params = {}) {
+  if (typeof gtag === 'function') gtag('event', name, params);
 }

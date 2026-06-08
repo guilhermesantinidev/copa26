@@ -21,6 +21,15 @@
   <title>Copa do Mundo 2026</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-T6CX0FYSGP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-T6CX0FYSGP');
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -39,6 +48,10 @@
         </div>
       </div>
       <div class="header-meta">
+        <button id="favs-btn" aria-label="Meus times favoritos" onclick="openFavsModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span id="favs-count" class="favs-count-badge" style="display:none"></span>
+        </button>
         <button id="search-btn" aria-label="Buscar jogos" onclick="openSearch()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
@@ -62,6 +75,24 @@
     <span class="widget-label">🇧🇷 BRASIL</span>
     <div class="widget-inner" id="widget-inner">
       <!-- preenchido por JS -->
+    </div>
+  </div>
+
+  <!-- Modal Favoritos -->
+  <div id="favs-modal" role="dialog" aria-label="Meus times favoritos" onclick="closeFavsModal()">
+    <div class="favs-sheet" onclick="event.stopPropagation()">
+      <div class="favs-header">
+        <div class="favs-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Meus Times
+        </div>
+        <div class="favs-subtitle">Jogos dos seus times aparecem primeiro no Ao Vivo</div>
+        <button class="favs-close" onclick="closeFavsModal()" aria-label="Fechar">✕</button>
+      </div>
+      <div id="favs-grid" class="favs-grid"></div>
+      <div class="favs-footer">
+        <button class="favs-done-btn" onclick="closeFavsModal()">Pronto</button>
+      </div>
     </div>
   </div>
 
@@ -230,6 +261,10 @@
   </main>
 
   <!-- Bottom safe area -->
+  <footer class="app-footer">
+    Desenvolvido por <a href="https://github.com/guilhermesantinidev" target="_blank" rel="noopener">Guilherme Santini</a>
+  </footer>
+
   <div class="bottom-safe"></div>
 
   <!-- Toast -->
