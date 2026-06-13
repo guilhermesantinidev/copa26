@@ -87,22 +87,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fdFetch(path) {
   const key = getApiKey();
-  const headers = { 'Accept': 'application/json' };
-  if (key) headers['X-Auth-Token'] = key;
+  const targetUrl = FD.base + path;
 
-  const res = await fetch(FD.base + path, {
-    headers,
-    signal: AbortSignal.timeout(12_000),
-  });
+  // Proxies CORS para contornar restrição do plano free do football-data.org
+  const PROXIES = [
+    url => url,                                                        // direto
+    url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,    // proxy 1
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, // proxy 2
+  ];
 
-  console.log(`[Copa] football-data.org ${path} → HTTP ${res.status}`);
-
-  if (res.status === 400) throw new Error('Competição ainda não disponível na API (400)');
-  if (res.status === 401) throw new Error('Token inválido (401) — verifique sua chave');
-  if (res.status === 403) throw new Error('Acesso negado (403) — plano free não cobre este endpoint');
-  if (res.status === 429) throw new Error('Limite atingido (429) — aguarde um minuto');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  let lastErr;
+  for (const proxyFn of PROXIES) {
+    const reqUrl = proxyFn(targetUrl);
+    const headers = { 'Accept': 'application/json' };
+    if (key) headers['X-Auth-Token'] = key;
+    try {
+      const res = await fetch(reqUrl, { headers, signal: AbortSignal.timeout(15_000) });
+      console.log(`[Copa] ${reqUrl === targetUrl ? 'direto' : 'proxy'} ${path} → HTTP ${res.status}`);
+      if (res.status === 400) throw new Error('Competição ainda não disponível na API (400)');
+      if (res.status === 401) throw new Error('Token inválido (401) — verifique sua chave');
+      if (res.status === 403) throw new Error('Acesso negado (403) — plano free não cobre este endpoint');
+      if (res.status === 429) throw new Error('Limite atingido (429) — aguarde um minuto');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    } catch (err) {
+      if (err.message.match(/Token|Acesso|Competição|Limite/)) throw err;
+      console.warn(`[Copa] falhou (${err.message}), tentando próximo...`);
+      lastErr = err;
+    }
+  }
+  throw lastErr;
 }
 
 // ── Busca todos os jogos ──────────────────────────────────────
