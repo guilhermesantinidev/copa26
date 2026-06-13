@@ -55,6 +55,10 @@
         <button id="search-btn" aria-label="Buscar jogos" onclick="openSearch()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
+        <button id="apikey-btn" aria-label="Configurar chave de API" onclick="openApiKeyModal()" title="Configurar chave de API">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span id="apikey-status-dot" class="apikey-status-dot"></span>
+        </button>
         <span class="live-badge" id="live-indicator" style="display:none">
           <span class="live-dot"></span>AO VIVO
         </span>
@@ -75,6 +79,33 @@
     <span class="widget-label">🇧🇷 BRASIL</span>
     <div class="widget-inner" id="widget-inner">
       <!-- preenchido por JS -->
+    </div>
+  </div>
+
+  <!-- Modal Chave de API -->
+  <div id="apikey-modal" role="dialog" aria-label="Configurar chave de API" onclick="closeApiKeyModal()">
+    <div class="favs-sheet" onclick="event.stopPropagation()">
+      <div class="favs-header">
+        <div class="favs-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Dados ao vivo
+        </div>
+        <div class="favs-subtitle">
+          Dados reais via <strong>football-data.org</strong> — gratuito, CORS liberado, sem proxy.<br>
+          Cadastre-se em <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener">football-data.org</a>
+          e cole seu token abaixo (plano free: 10 req/min).
+        </div>
+        <button class="favs-close" onclick="closeApiKeyModal()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="apikey-body">
+        <label for="apikey-input" class="apikey-label">Token football-data.org</label>
+        <input id="apikey-input" type="text" class="apikey-input" placeholder="Cole seu token aqui…" autocomplete="off" spellcheck="false" />
+        <div id="apikey-feedback" class="apikey-feedback"></div>
+      </div>
+      <div class="favs-footer apikey-footer">
+        <button class="apikey-remove-btn" onclick="removeApiKeyAction()">Remover chave</button>
+        <button class="favs-done-btn" onclick="saveApiKeyAction()">Salvar e conectar</button>
+      </div>
     </div>
   </div>
 

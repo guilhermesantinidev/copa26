@@ -4,19 +4,18 @@
 // Push notifications para jogos do Brasil
 // =============================================
 
-const CACHE_NAME = 'copa2026-v4';
+const CACHE_NAME = 'copa2026-v5';
 const BASE = self.location.pathname.replace('/sw.js', '');
 
 const ASSETS = [
   BASE + '/',
   BASE + '/index.html',
   BASE + '/css/style.css',
-  BASE + '/js/data.js',
-  BASE + '/js/app.js',
   BASE + '/manifest.json',
   BASE + '/icons/icon-192.png',
   'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap',
 ];
+// Nota: app.js e data.js NÃO estão no cache para sempre receber a versão mais recente
 
 // ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', e => {
@@ -45,8 +44,9 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
 
-  // Sempre network para APIs externas
+  // Sempre network para APIs externas (nunca servir do cache)
   if (
+    url.hostname.includes('football-data.org') ||
     url.hostname.includes('sofascore') ||
     url.hostname.includes('rapidapi') ||
     url.hostname.includes('corsproxy') ||
