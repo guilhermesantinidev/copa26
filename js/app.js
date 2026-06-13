@@ -102,7 +102,14 @@ async function fdFetch(path) {
     const headers = { 'Accept': 'application/json' };
     if (key) headers['X-Auth-Token'] = key;
     try {
-      const res = await fetch(reqUrl, { headers, signal: AbortSignal.timeout(15_000) });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      let res;
+      try {
+        res = await fetch(reqUrl, { headers, signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       console.log(`[Copa] ${reqUrl === targetUrl ? 'direto' : 'proxy'} ${path} → HTTP ${res.status}`);
       if (res.status === 400) throw new Error('Competição ainda não disponível na API (400)');
       if (res.status === 401) throw new Error('Token inválido (401) — verifique sua chave');
