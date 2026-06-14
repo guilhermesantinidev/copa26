@@ -1501,3 +1501,108 @@ body.no-widget .app-main {
   75%  { opacity: 1; }
   100% { opacity: 0; }
 }
+/* ══════════════════════════════════════════════════════════
+   CHAVE DE API (API-Football)
+   ══════════════════════════════════════════════════════════ */
+
+#apikey-btn {
+  background: none;
+  border: none;
+  color: var(--text-sec);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: color 0.2s;
+}
+#apikey-btn:hover { color: var(--gold); }
+
+.apikey-status-dot {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+}
+.apikey-status-dot.configured {
+  background: #d6a000;
+}
+.apikey-status-dot.connected {
+  background: #2ecc71;
+  box-shadow: 0 0 6px #2ecc71;
+}
+
+#apikey-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 9, 18, 0.7);
+  z-index: 220;
+  align-items: flex-end;
+  justify-content: center;
+}
+#apikey-modal.open { display: flex; }
+
+.apikey-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apikey-label {
+  font-size: 12px;
+  color: var(--text-sec);
+  font-weight: 600;
+}
+
+.apikey-input {
+  width: 100%;
+  background: var(--bg-elevated, rgba(255,255,255,0.04));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: monospace;
+}
+.apikey-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.apikey-feedback {
+  font-size: 12.5px;
+  color: var(--text-sec);
+  min-height: 16px;
+}
+
+.apikey-footer {
+  display: flex;
+  gap: 10px;
+}
+.apikey-footer .favs-done-btn { flex: 1; }
+
+.apikey-remove-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-sec);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.apikey-remove-btn:hover {
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+.favs-subtitle a { color: var(--gold); text-decoration: underline; }

@@ -1,196 +1,352 @@
 // ============================================================
-// COPA DO MUNDO 2026 — App Principal
-// Fonte: SofaScore API (não-oficial, sem chave necessária)
-// Torneio ID 77 = FIFA World Cup no SofaScore
-// Atualização automática a cada 60s (30s durante jogos ao vivo)
+// COPA DO MUNDO 2026 — App Principal v6
+// Fonte primária : openfootball/world-cup.json (GitHub)
+//   - 100% gratuito, sem chave, sem CORS
+//   - Atualizado pela comunidade após cada jogo
+//   - URL: raw.githubusercontent.com/openfootball/world-cup.json
+// Fallback       : dados demo (DEMO_MATCHES / GROUPS)
 // ============================================================
 
 const FAVS_KEY = 'copa26_favs';
 
-const SOFA = {
-  base:       'https://api.sofascore.com/api/v1',
-  tourneyId:  77,      // FIFA World Cup
-  seasonId:   null,    // preenchido automaticamente na inicialização
+// openfootball — fonte de dados principal
+const OFB = {
+  url: 'https://raw.githubusercontent.com/openfootball/world-cup.json/master/2026/worldcup.json',
 };
 
-// User-Agent de browser para evitar bloqueio
-const SOFA_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-  'Accept': 'application/json',
-  'Referer': 'https://www.sofascore.com/',
-};
-
-// Proxies CORS públicos (tentados em ordem)
-const CORS_PROXIES = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url=',
-  'https://thingproxy.freeboard.io/fetch/',
-];
+// Stub vazio para manter compatibilidade com initApiKeyModal / modal de chave
+function getApiKey()  { return ''; }
+function setApiKey(k) { /* não usado */ }
 
 // ── Mapa de fusos por cidade/estádio ─────────────────────────
 const VENUE_TZ = {
-  // EUA
-  'Nova York / NJ': 'America/New_York', 'New York':     'America/New_York',
-  'Boston':         'America/New_York', 'Philadelphia':  'America/New_York',
-  'Miami':          'America/New_York',
-  'Dallas':         'America/Chicago',  'Kansas City':   'America/Chicago',
-  'Houston':        'America/Chicago',  'Atlanta':       'America/New_York',
-  'Los Angeles':    'America/Los_Angeles', 'Pasadena':   'America/Los_Angeles',
-  'San Francisco':  'America/Los_Angeles', 'Seattle':    'America/Los_Angeles',
-  'Denver':         'America/Denver',
-  // Canadá
-  'Toronto':        'America/Toronto',  'Vancouver':     'America/Vancouver',
-  // México
-  'Cidade do México': 'America/Mexico_City', 'Guadalajara': 'America/Mexico_City',
-  'Monterrey':      'America/Monterrey',
+  'Nova York / NJ':   'America/New_York',  'New York':        'America/New_York',
+  'Boston':           'America/New_York',  'Philadelphia':    'America/New_York',
+  'Miami':            'America/New_York',  'Atlanta':         'America/New_York',
+  'Dallas':           'America/Chicago',   'Kansas City':     'America/Chicago',
+  'Houston':          'America/Chicago',
+  'Los Angeles':      'America/Los_Angeles','Pasadena':       'America/Los_Angeles',
+  'San Francisco':    'America/Los_Angeles','Seattle':        'America/Los_Angeles',
+  'Denver':           'America/Denver',
+  'Toronto':          'America/Toronto',   'Vancouver':       'America/Vancouver',
+  'Cidade do México': 'America/Mexico_City','Guadalajara':    'America/Mexico_City',
+  'Monterrey':        'America/Monterrey',
 };
-
 const TZ_LABEL = {
-  'America/New_York':    'ET',
-  'America/Chicago':     'CT',
-  'America/Denver':      'MT',
-  'America/Los_Angeles': 'PT',
-  'America/Toronto':     'ET',
-  'America/Vancouver':   'PT',
-  'America/Mexico_City': 'CT',
-  'America/Monterrey':   'CT',
+  'America/New_York':    'ET',  'America/Chicago':     'CT',
+  'America/Denver':      'MT',  'America/Los_Angeles': 'PT',
+  'America/Toronto':     'ET',  'America/Vancouver':   'PT',
+  'America/Mexico_City': 'CT',  'America/Monterrey':   'CT',
 };
 
-
+// ── Estado global ─────────────────────────────────────────────
 const state = {
-  matches:       [],
-  liveMatches:   [],
-  standings:     {},
-  activeTab:     'ao-vivo',
-  lastUpdate:    null,
+  matches:         [],
+  liveMatches:     [],
+  standings:       {},
+  activeTab:       'ao-vivo',
+  lastUpdate:      null,
   refreshInterval: null,
-  isLive:        false,
-  usingDemo:     true,
-  loading:       false,
-  proxyIndex:    0,
-  prevScores:    {},   // { matchId: { home, away } } — detecta gols
-  favTeams:      new Set(JSON.parse(localStorage.getItem('copa26_favs') || '[]')),
+  isLive:          false,
+  usingDemo:       true,
+  loading:         false,
+  prevScores:      {},
+  favTeams:        new Set(JSON.parse(localStorage.getItem(FAVS_KEY) || '[]')),
+  _fetching:       false,
 };
 
-// ── Init ─────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   renderTodayDate();
   renderCountdown();
   setInterval(renderCountdown, 1000);
 
-  loadDemoData();   // exibe conteúdo imediatamente
-  fetchSofaScore(); // depois tenta dados reais em background
+  loadDemoData();          // conteúdo imediato
+  fetchLiveData();         // tenta API real
   startAutoRefresh();
   showTab('ao-vivo');
 
-  // Novas funcionalidades
   renderBrasilWidget();
   setInterval(renderBrasilWidget, 30_000);
   initNotifBanner();
   initSearchKeyboard();
   initFavsModal();
+  initApiKeyModal();
 });
 
-// ── Fetch principal ───────────────────────────────────────────
-async function fetchSofaScore() {
+// ══════════════════════════════════════════════════════════════
+// OPENFOOTBALL — Camada de dados principal
+// Fonte: github.com/openfootball/world-cup.json
+// 100% gratuito · sem chave · sem CORS · sem proxy
+// Atualizado pela comunidade após cada resultado oficial
+// ══════════════════════════════════════════════════════════════
+
+// Mapa nome EN (openfootball) → nome PT + bandeira
+const TEAM_MAP = {
+  'Mexico':              { pt: 'México',          flag: '🇲🇽' },
+  'South Africa':        { pt: 'África do Sul',   flag: '🇿🇦' },
+  'South Korea':         { pt: 'Coreia do Sul',   flag: '🇰🇷' },
+  'Denmark':             { pt: 'Dinamarca',        flag: '🇩🇰' },
+  'Canada':              { pt: 'Canadá',           flag: '🇨🇦' },
+  'Qatar':               { pt: 'Catar',            flag: '🇶🇦' },
+  'Switzerland':         { pt: 'Suíça',            flag: '🇨🇭' },
+  'Italy':               { pt: 'Itália',           flag: '🇮🇹' },
+  'USA':                 { pt: 'EUA',              flag: '🇺🇸' },
+  'Paraguay':            { pt: 'Paraguai',         flag: '🇵🇾' },
+  'Australia':           { pt: 'Austrália',        flag: '🇦🇺' },
+  'Turkey':              { pt: 'Turquia',          flag: '🇹🇷' },
+  'Germany':             { pt: 'Alemanha',         flag: '🇩🇪' },
+  'Curaçao':             { pt: 'Curaçao',          flag: '🇨🇼' },
+  "Côte d'Ivoire":       { pt: 'Costa do Marfim',  flag: '🇨🇮' },
+  'Ecuador':             { pt: 'Equador',          flag: '🇪🇨' },
+  'Netherlands':         { pt: 'Holanda',          flag: '🇳🇱' },
+  'Japan':               { pt: 'Japão',            flag: '🇯🇵' },
+  'Tunisia':             { pt: 'Tunísia',          flag: '🇹🇳' },
+  'Ukraine':             { pt: 'Ucrânia',          flag: '🇺🇦' },
+  'Belgium':             { pt: 'Bélgica',          flag: '🇧🇪' },
+  'Egypt':               { pt: 'Egito',            flag: '🇪🇬' },
+  'Iran':                { pt: 'Irã',              flag: '🇮🇷' },
+  'New Zealand':         { pt: 'Nova Zelândia',    flag: '🇳🇿' },
+  'Brazil':              { pt: 'Brasil',           flag: '🇧🇷' },
+  'Morocco':             { pt: 'Marrocos',         flag: '🇲🇦' },
+  'Haiti':               { pt: 'Haiti',            flag: '🇭🇹' },
+  'Scotland':            { pt: 'Escócia',          flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  'Spain':               { pt: 'Espanha',          flag: '🇪🇸' },
+  'Cape Verde':          { pt: 'Cabo Verde',       flag: '🇨🇻' },
+  'Saudi Arabia':        { pt: 'Arábia Saudita',   flag: '🇸🇦' },
+  'Uruguay':             { pt: 'Uruguai',          flag: '🇺🇾' },
+  'France':              { pt: 'França',           flag: '🇫🇷' },
+  'Senegal':             { pt: 'Senegal',          flag: '🇸🇳' },
+  'Norway':              { pt: 'Noruega',          flag: '🇳🇴' },
+  'Iraq':                { pt: 'Iraque',           flag: '🇮🇶' },
+  'Argentina':           { pt: 'Argentina',        flag: '🇦🇷' },
+  'Algeria':             { pt: 'Argélia',          flag: '🇩🇿' },
+  'Austria':             { pt: 'Áustria',          flag: '🇦🇹' },
+  'Jordan':              { pt: 'Jordânia',         flag: '🇯🇴' },
+  'Portugal':            { pt: 'Portugal',         flag: '🇵🇹' },
+  'Uzbekistan':          { pt: 'Uzbequistão',      flag: '🇺🇿' },
+  'Colombia':            { pt: 'Colômbia',         flag: '🇨🇴' },
+  'DR Congo':            { pt: 'Rep. D. Congo',    flag: '🇨🇩' },
+  'England':             { pt: 'Inglaterra',       flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+  'Croatia':             { pt: 'Croácia',          flag: '🇭🇷' },
+  'Ghana':               { pt: 'Gana',             flag: '🇬🇭' },
+  'Panama':              { pt: 'Panamá',           flag: '🇵🇦' },
+  'Czech Republic':      { pt: 'República Checa',  flag: '🇨🇿' },
+  "Bosnia & Herzegovina":{ pt: 'Bósnia e Herz.',   flag: '🇧🇦' },
+};
+
+// Mapa cidade/estádio openfootball → nome exibido
+const GROUND_MAP = {
+  'Mexico City':                    'Cidade do México',
+  'Guadalajara (Zapopan)':          'Guadalajara',
+  'Monterrey (Guadalupe)':          'Monterrey',
+  'Toronto':                        'Toronto',
+  'Vancouver':                      'Vancouver',
+  'New York/New Jersey (East Rutherford)': 'Nova York / NJ',
+  'Boston (Foxborough)':            'Boston',
+  'Philadelphia':                   'Philadelphia',
+  'Miami':                          'Miami',
+  'Atlanta':                        'Atlanta',
+  'Dallas':                         'Dallas',
+  'Kansas City':                    'Kansas City',
+  'Houston':                        'Houston',
+  'Los Angeles (Inglewood)':        'Los Angeles',
+  'San Francisco Bay Area (Santa Clara)': 'San Francisco',
+  'Seattle':                        'Seattle',
+  'Denver':                         'Denver',
+};
+
+function ofbTeam(name) {
+  return TEAM_MAP[name] || { pt: name, flag: getFlag(name) };
+}
+
+function ofbCity(ground) {
+  return GROUND_MAP[ground] || ground || '';
+}
+
+// Converte horário "HH:MM UTC±X" para BRT (UTC-3)
+function ofbTimeToBRT(timeStr, dateStr) {
+  try {
+    const m = timeStr.match(/(\d+):(\d+)\s*UTC([+-]\d+)/);
+    if (!m) return timeStr;
+    const [, h, min, offset] = m;
+    const utcMs = new Date(`${dateStr}T${h.padStart(2,'0')}:${min}:00Z`).getTime()
+                  - Number(offset) * 3600000;
+    const brt   = new Date(utcMs + (-3) * 3600000); // BRT = UTC-3
+    return `${String(brt.getUTCHours()).padStart(2,'0')}:${String(brt.getUTCMinutes()).padStart(2,'0')}`;
+  } catch { return timeStr; }
+}
+
+// Normaliza jogo openfootball → formato interno
+let _ofbIdCounter = 1;
+function normalizeOFB(m) {
+  const homeInfo = ofbTeam(m.team1);
+  const awayInfo = ofbTeam(m.team2);
+  const homeName = homeInfo.pt;
+  const awayName = awayInfo.pt;
+
+  const timeBRT = ofbTimeToBRT(m.time || '00:00 UTC+0', m.date);
+
+  // Status: tem score.ft → finished; sem score → upcoming
+  // Detecção ao vivo: jogo de hoje sem score ainda (heurística)
+  const today = new Date().toISOString().slice(0, 10);
+  const hasScore = m.score && Array.isArray(m.score.ft);
+  let status = 'upcoming';
+  if (hasScore) {
+    status = 'finished';
+  } else if (m.date === today) {
+    // Verifica se o horário BRT já passou → provavelmente ao vivo ou encerrado
+    const [hh, mm]  = timeBRT.split(':').map(Number);
+    const nowBRT    = new Date(Date.now() - 3 * 3600000); // UTC-3
+    const gameMinBRT = hh * 60 + mm;
+    const nowMinBRT  = nowBRT.getUTCHours() * 60 + nowBRT.getUTCMinutes();
+    if (nowMinBRT >= gameMinBRT && nowMinBRT < gameMinBRT + 110) status = 'live';
+    else if (nowMinBRT >= gameMinBRT + 110) status = 'finished';
+  }
+
+  // Grupo: "Group A" → "A"
+  const groupM = (m.group || '').match(/([A-L])$/i);
+  const group  = groupM ? groupM[1].toUpperCase() : null;
+
+  const city = ofbCity(m.ground);
+
+  return {
+    id:        m._id || (_ofbIdCounter++),
+    group,
+    phase:     group ? 'grupos' : 'eliminatórias',
+    highlight: /brazil|brasil/i.test(m.team1) || /brazil|brasil/i.test(m.team2),
+    home: { name: homeName, flag: homeInfo.flag, code: m.team1.slice(0,3).toUpperCase() },
+    away: { name: awayName, flag: awayInfo.flag, code: m.team2.slice(0,3).toUpperCase() },
+    date:     m.date,
+    time:     timeBRT,
+    timezone: 'BRT',
+    venue:    m.ground || '',
+    city,
+    status,
+    score:    hasScore ? { home: m.score.ft[0], away: m.score.ft[1] } : null,
+    minute:   status === 'live' ? 'AO VIVO' : null,
+    events:   (m.goals1 || []).map(g => ({ team: 'home', player: g.name, minute: g.minute }))
+              .concat((m.goals2 || []).map(g => ({ team: 'away', player: g.name, minute: g.minute }))),
+  };
+}
+
+// Calcula classificação de grupo a partir dos jogos
+function computeStandings(matches) {
+  const standings = {};
+  matches.filter(m => m.group && m.status === 'finished' && m.score).forEach(m => {
+    const g = m.group;
+    if (!standings[g]) standings[g] = {};
+    const ensure = name => {
+      if (!standings[g][name]) standings[g][name] = { team: name, flag: '', played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 };
+    };
+    ensure(m.home.name); ensure(m.away.name);
+    standings[g][m.home.name].flag = m.home.flag;
+    standings[g][m.away.name].flag = m.away.flag;
+    const h = m.score.home, a = m.score.away;
+    standings[g][m.home.name].played++; standings[g][m.away.name].played++;
+    standings[g][m.home.name].gf += h;  standings[g][m.home.name].ga += a;
+    standings[g][m.away.name].gf += a;  standings[g][m.away.name].ga += h;
+    standings[g][m.home.name].gd = standings[g][m.home.name].gf - standings[g][m.home.name].ga;
+    standings[g][m.away.name].gd = standings[g][m.away.name].gf - standings[g][m.away.name].ga;
+    if (h > a) { standings[g][m.home.name].won++; standings[g][m.home.name].points+=3; standings[g][m.away.name].lost++; }
+    else if (h < a) { standings[g][m.away.name].won++; standings[g][m.away.name].points+=3; standings[g][m.home.name].lost++; }
+    else { standings[g][m.home.name].drawn++; standings[g][m.home.name].points++; standings[g][m.away.name].drawn++; standings[g][m.away.name].points++; }
+  });
+  // Garante que todas as seleções aparecem mesmo sem ter jogado
+  matches.filter(m => m.group).forEach(m => {
+    const g = m.group;
+    if (!standings[g]) standings[g] = {};
+    [{ name: m.home.name, flag: m.home.flag }, { name: m.away.name, flag: m.away.flag }].forEach(t => {
+      if (!standings[g][t.name]) standings[g][t.name] = { team: t.name, flag: t.flag, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 };
+      else if (!standings[g][t.name].flag) standings[g][t.name].flag = t.flag;
+    });
+  });
+  // Converte para array ordenado por pontos/saldo/gf
+  const result = {};
+  Object.keys(standings).sort().forEach(g => {
+    result[g] = Object.values(standings[g]).sort((a,b) =>
+      b.points - a.points || b.gd - a.gd || b.gf - a.gf
+    );
+  });
+  return result;
+}
+
+// ── Busca principal via openfootball ─────────────────────────
+async function ofbFetch() {
+  const res = await fetch(OFB.url + '?_=' + Date.now(), {
+    signal: AbortSignal.timeout(15_000),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
+  const data = await res.json();
+  const raw  = data.matches || [];
+  if (!raw.length) throw new Error('openfootball: nenhum jogo retornado');
+
+  // Atribui IDs estáveis baseados no índice
+  _ofbIdCounter = 1;
+  raw.forEach((m, i) => { m._id = i + 1; });
+
+  state.matches = raw.map(normalizeOFB);
+  console.log(`[Copa] openfootball: ${state.matches.length} jogos (${state.matches.filter(m=>m.score).length} com resultado)`);
+
+  state.standings = computeStandings(state.matches);
+
+  renderCalendar();
+  renderResults();
+  renderGroups();
+}
+
+// ── Busca principal (orquestrador) ────────────────────────────
+async function fetchLiveData() {
+  if (state._fetching) return;
+  state._fetching = true;
+
   try {
     setLoadingState(true);
-
-    // 1. Busca o season ID atual da Copa 2026
-    if (!SOFA.seasonId) {
-      SOFA.seasonId = await fetchSeasonId();
-      if (!SOFA.seasonId) throw new Error('Season não encontrada');
-    }
-
-    // 2. Busca dados em paralelo
-    await Promise.all([
-      fetchLiveAndToday(),
-      fetchAllMatches(),
-      fetchStandings(),
-    ]);
-
+    await ofbFetch();
+    updateLiveAndToday();
     state.usingDemo  = false;
     state.lastUpdate = new Date();
     updateLastUpdateTime();
+    updateApiKeyStatusDot();
+    showToast('✅ Dados atualizados (openfootball)');
   } catch (err) {
-    console.warn('[Copa/SofaScore] Usando demo:', err.message);
-    // Mantém dados demo — não mostra erro pro usuário na primeira carga
-    if (state.lastUpdate) {
-      showToast('⚠️ Falha ao atualizar — usando cache');
+    console.warn('[Copa] openfootball falhou:', err.message);
+    if (state.usingDemo) {
+      showToast('📡 Modo demonstração (sem conexão)');
+    } else {
+      showToast('⚠️ Erro ao buscar dados: ' + err.message);
     }
+    updateApiKeyStatusDot();
   } finally {
+    state._fetching  = false;
     setLoadingState(false);
   }
 }
 
-// ── Fetch com proxy CORS automático ──────────────────────────
-async function sofaFetch(path) {
-  const fullUrl = SOFA.base + path;
-
-  // Tenta sem proxy primeiro (funciona em alguns ambientes/apps)
+// ── Atualização leve (ao vivo) ────────────────────────────────
+async function fetchLiveOnly() {
   try {
-    const res = await fetch(fullUrl, {
-      headers: SOFA_HEADERS,
-      signal: AbortSignal.timeout(6_000),
-    });
-    if (res.ok) return await res.json();
-  } catch (_) {}
-
-  // Tenta proxies em ordem, memorizando o que funcionou
-  const proxies = [...CORS_PROXIES.slice(state.proxyIndex), ...CORS_PROXIES.slice(0, state.proxyIndex)];
-  for (let i = 0; i < proxies.length; i++) {
-    try {
-      const proxyUrl = proxies[i] + encodeURIComponent(fullUrl);
-      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8_000) });
-      if (res.ok) {
-        const data = await res.json();
-        // Memoriza o proxy que funcionou
-        state.proxyIndex = CORS_PROXIES.indexOf(proxies[i]);
-        return data;
-      }
-    } catch (_) {}
-  }
-
-  throw new Error(`Todos os proxies falharam para ${path}`);
-}
-
-// ── Season ID ─────────────────────────────────────────────────
-async function fetchSeasonId() {
-  try {
-    const data = await sofaFetch(`/unique-tournament/${SOFA.tourneyId}/seasons`);
-    // Pega a season mais recente (primeira da lista)
-    const seasons = data.seasons || [];
-    // Procura especificamente 2026
-    const s2026 = seasons.find(s => s.year === '2026' || s.name?.includes('2026'));
-    return (s2026 || seasons[0])?.id || null;
+    await ofbFetch();
+    updateLiveAndToday();
+    state.lastUpdate = new Date();
+    updateLastUpdateTime();
   } catch (err) {
-    console.warn('[Copa] Não conseguiu buscar season:', err.message);
-    return null;
+    console.warn('[Copa] fetchLiveOnly:', err.message);
   }
 }
 
-// ── Jogos ao vivo + hoje ──────────────────────────────────────
-async function fetchLiveAndToday() {
+
+// ── Atualiza ao vivo / hoje a partir de state.matches ────────
+function updateLiveAndToday() {
   const today = new Date().toISOString().slice(0, 10);
-
-  // Jogos ao vivo do torneio
-  const [liveData, todayData] = await Promise.all([
-    sofaFetch(`/sport/football/events/live`).catch(() => ({ events: [] })),
-    sofaFetch(`/sport/football/scheduled-events/${today}`).catch(() => ({ events: [] })),
-  ]);
-
-  // Filtra apenas jogos da Copa 2026 (tournamentId 77)
-  const isWC = e =>
-    e.tournament?.uniqueTournament?.id === SOFA.tourneyId ||
-    e.season?.id === SOFA.seasonId;
-
-  const live  = (liveData.events || []).filter(isWC).map(normalizeSofa);
-  const today2 = (todayData.events || []).filter(isWC).map(normalizeSofa);
+  const live    = state.matches.filter(m => m.status === 'live');
+  const today2  = state.matches.filter(m => m.date === today);
 
   const liveIds = new Set(live.map(m => m.id));
   const newLiveMatches = [...live, ...today2.filter(m => !liveIds.has(m.id))];
 
-  // Detecta gols comparando com placares anteriores
+  // Detecta gols
   const goalEvents = [];
   newLiveMatches.forEach(m => {
     if (!m.score) return;
@@ -202,149 +358,34 @@ async function fetchLiveAndToday() {
   });
 
   state.liveMatches = newLiveMatches;
-  state.isLive = live.length > 0;
+  state.isLive      = live.length > 0;
 
   const indicator = document.getElementById('live-indicator');
   if (indicator) indicator.style.display = state.isLive ? 'flex' : 'none';
 
   renderLiveTab();
 
-  // Dispara animação nos cards com gol
-  if (goalEvents.length) {
-    goalEvents.forEach(id => {
-      triggerGoalAnimation(id);
-      const m = state.liveMatches.find(x => String(x.id) === String(id));
-      if (m) gaEvent('goal_detected', { match: m.home.name + ' x ' + m.away.name, score: m.score.home + '-' + m.score.away });
-    });
-  }
-}
-
-// ── Todos os jogos do torneio ─────────────────────────────────
-async function fetchAllMatches() {
-  if (!SOFA.seasonId) return;
-  try {
-    // Busca por rounds: Copa 2026 tem ~35 rodadas (104 jogos + mata-mata)
-    const rounds = Array.from({ length: 35 }, (_, i) => i + 1);
-    const results = await Promise.all(
-      rounds.map(r =>
-        sofaFetch(`/unique-tournament/${SOFA.tourneyId}/season/${SOFA.seasonId}/events/round/${r}`)
-          .catch(() => ({ events: [] }))
-      )
-    );
-    state.matches = results.flatMap(d => (d.events || []).map(normalizeSofa));
-    renderCalendar();
-    renderResults();
-  } catch (err) {
-    console.warn('[Copa] fetchAllMatches:', err.message);
-  }
-}
-
-// ── Classificação ─────────────────────────────────────────────
-async function fetchStandings() {
-  if (!SOFA.seasonId) return;
-  try {
-    const data = await sofaFetch(
-      `/unique-tournament/${SOFA.tourneyId}/season/${SOFA.seasonId}/standings/total`
-    );
-
-    const groups = {};
-    (data.standings || []).forEach(standing => {
-      const name = standing.name || ''; // ex: "Group A"
-      const match = name.match(/Group\s+([A-L])/i);
-      if (!match) return;
-      const letter = match[1].toUpperCase();
-      groups[letter] = (standing.rows || []).map(r => ({
-        team:   r.team?.name || '?',
-        flag:   getFlag(r.team?.name || ''),
-        played: r.matches    || 0,
-        won:    r.wins       || 0,
-        drawn:  r.draws      || 0,
-        lost:   r.losses     || 0,
-        gf:     r.scoresFor  || 0,
-        ga:     r.scoresAgainst || 0,
-        gd:     (r.scoresFor || 0) - (r.scoresAgainst || 0),
-        points: r.points     || 0,
-      }));
-    });
-
-    if (Object.keys(groups).length > 0) {
-      state.standings = groups;
-      renderGroups();
-    }
-  } catch (err) {
-    console.warn('[Copa] fetchStandings:', err.message);
-  }
-}
-
-// ── Normaliza evento SofaScore → formato interno ─────────────
-function normalizeSofa(e) {
-  const sc  = e.homeScore?.current;
-  const sc2 = e.awayScore?.current;
-  const hasScore = sc !== undefined && sc !== null;
-
-  const statusCode = e.status?.code;
-  let status = 'upcoming';
-  // SofaScore: 0=não iniciado, 6=ao vivo, 7=intervalo, 100=encerrado
-  if (statusCode === 6 || statusCode === 7 || statusCode === 31)  status = 'live';
-  else if (statusCode === 100 || statusCode === 110) status = 'finished';
-
-  const startDate = new Date((e.startTimestamp || 0) * 1000);
-  const dateStr   = startDate.toISOString().slice(0, 10);
-  const timeStr   = startDate.toLocaleTimeString('pt-BR', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
+  goalEvents.forEach(id => {
+    triggerGoalAnimation(id);
+    const m = state.liveMatches.find(x => String(x.id) === String(id));
+    if (m) gaEvent('goal_detected', { match: m.home.name + ' x ' + m.away.name });
   });
-
-  const roundStr = e.roundInfo?.name || e.roundInfo?.round?.toString() || '';
-  const groupM   = roundStr.match(/Group\s+([A-L])/i);
-  const group    = groupM ? groupM[1].toUpperCase() : null;
-
-  const homeName = e.homeTeam?.name || '?';
-  const awayName = e.awayTeam?.name || '?';
-
-  const minute = e.time?.played
-    ? `${e.time.played}'`
-    : e.status?.description || null;
-
-  return {
-    id:        e.id,
-    group,
-    phase:     detectPhase(roundStr),
-    highlight: /brazil|brasil/i.test(homeName) || /brazil|brasil/i.test(awayName),
-    home: { name: homeName, flag: getFlag(homeName), code: homeName.slice(0, 3).toUpperCase() },
-    away: { name: awayName, flag: getFlag(awayName), code: awayName.slice(0, 3).toUpperCase() },
-    date:     dateStr,
-    time:     timeStr,
-    timezone: 'BRT',
-    venue:    e.venue?.stadium?.name || '',
-    city:     e.venue?.city?.name   || '',
-    status,
-    score:    hasScore ? { home: sc, away: sc2 } : null,
-    minute,
-    events:   [],
-  };
-}
-
-function detectPhase(round) {
-  const r = (round || '').toLowerCase();
-  if (r.includes('group'))                                  return 'grupos';
-  if (r.includes('round of 32') || r.includes('32'))       return 'oitavas';
-  if (r.includes('round of 16') || r.includes('16'))       return 'oitavas';
-  if (r.includes('quarter'))                                return 'quartas';
-  if (r.includes('semi'))                                   return 'semi';
-  if (r.includes('3rd') || r.includes('third'))            return 'terceiro';
-  if (r.includes('final'))                                  return 'final';
-  return 'grupos';
 }
 
 // ── Auto Refresh ──────────────────────────────────────────────
 function startAutoRefresh() {
   stopAutoRefresh();
-  const interval = state.isLive ? 30_000 : 60_000;
+  // Ao vivo: 60s · sem jogos ao vivo: 5 min (respeita 10 req/min free)
+  const interval = state.isLive ? 60_000 : 5 * 60_000;
   state.refreshInterval = setInterval(async () => {
-    await fetchLiveAndToday();
-    if (state.isLive) await fetchAllMatches();
-    updateLastUpdateTime();
-    startAutoRefresh(); // reajusta intervalo
+    if (state.usingDemo) {
+      await fetchLiveData();
+    } else if (state.isLive) {
+      await fetchLiveOnly();
+    } else {
+      await fetchLiveData();
+    }
+    startAutoRefresh();
   }, interval);
 }
 
@@ -391,7 +432,6 @@ function renderLiveTab() {
   if (!container) return;
 
   let html = '';
-
   const hasFavs = state.favTeams.size > 0;
 
   if (state.usingDemo) {
@@ -403,7 +443,7 @@ function renderLiveTab() {
       if (favMatches.length) html += renderMatchSection('⭐ Meus Times', favMatches);
     }
     html += renderMatchSection('📅 Jogos do Brasil na Copa 2026', DEMO_MATCHES.filter(m => m.highlight));
-    html += `<div class="demo-notice">📡 Aguardando conexão com SofaScore para dados ao vivo…</div>`;
+    html += `<div class="demo-notice">📡 Configure sua chave gratuita em <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener">football-data.org</a> para dados ao vivo.</div>`;
   } else {
     const live     = state.liveMatches.filter(m => m.status === 'live');
     const upcoming = state.liveMatches.filter(m => m.status === 'upcoming');
@@ -413,11 +453,11 @@ function renderLiveTab() {
       const favLive = live.filter(m =>
         state.favTeams.has(m.home.name) || state.favTeams.has(m.away.name)
       );
-      const favUpcoming = upcoming.filter(m =>
+      const favUp = upcoming.filter(m =>
         state.favTeams.has(m.home.name) || state.favTeams.has(m.away.name)
       );
-      if (favLive.length || favUpcoming.length) {
-        html += renderMatchSection('⭐ Meus Times', [...favLive, ...favUpcoming]);
+      if (favLive.length || favUp.length) {
+        html += renderMatchSection('⭐ Meus Times', [...favLive, ...favUp]);
       }
     }
 
@@ -473,7 +513,7 @@ function renderCountdown() {
   set('cnt-secs',  Math.floor((diff % 60000) / 1000), true);
 }
 
-// ── Match Card ────────────────────────────────────────────────
+// ── Match Section / Card ──────────────────────────────────────
 function renderMatchSection(title, matches) {
   if (!matches.length) return '';
   return `<div class="match-section">
@@ -506,20 +546,17 @@ function renderMatchCard(m) {
 
   const groupLabel = m.group ? `Grupo ${m.group}` : (m.phase || '');
 
-  // Linha de horário local da sede (apenas para jogos futuros)
+  // Horário local da sede
   const localTimeHtml = (!m.score && m.date && m.time)
     ? (() => {
         try {
           const tz = VENUE_TZ[m.city] || VENUE_TZ[m.venue] || null;
           if (!tz) return '';
-          const [h, min] = m.time.split(':').map(Number);
-          // Cria um Date no dia/hora BRT e converte para o fuso da sede
           const brtDate = new Date(`${m.date}T${m.time}:00-03:00`);
           const localStr = brtDate.toLocaleTimeString('pt-BR', {
             timeZone: tz, hour: '2-digit', minute: '2-digit',
           });
-          const tzLabel = TZ_LABEL[tz] || tz;
-          return `<div class="match-local-time">🌎 ${localStr} horário local (${tzLabel})</div>`;
+          return `<div class="match-local-time">🌎 ${localStr} horário local (${TZ_LABEL[tz] || tz})</div>`;
         } catch { return ''; }
       })()
     : '';
@@ -596,11 +633,11 @@ function renderResults() {
   const finished = state.matches.filter(m => m.status === 'finished');
 
   if (!finished.length) {
-    const now       = new Date();
-    const diff      = COPA_START - now;
-    const daysLeft  = diff > 0 ? Math.ceil(diff / 86400000) : 0;
+    const now      = new Date();
+    const diff     = COPA_START - now;
+    const daysLeft = diff > 0 ? Math.ceil(diff / 86400000) : 0;
     const msg = diff > 0
-      ? `A Copa começa em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong> — em ${daysLeft === 4 ? 'breve' : '11 de junho'}!`
+      ? `A Copa começa em <strong>${daysLeft} dia${daysLeft !== 1 ? 's' : ''}</strong>!`
       : 'Os primeiros resultados aparecem aqui após cada jogo.';
     container.innerHTML = `<div class="empty-state empty-results">
       <div class="empty-icon">⚽</div>
@@ -628,14 +665,13 @@ function renderGroups() {
   if (!container) return;
 
   const groups = Object.keys(state.standings).sort();
-
   if (!groups.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><p>Carregando grupos...</p></div>`;
     return;
   }
 
   container.innerHTML = groups.map(g => {
-    const teams    = state.standings[g] || [];
+    const teams     = state.standings[g] || [];
     const hasBrasil = teams.some(t => /brazil|brasil/i.test(t.team));
 
     return `<div class="group-table-card${hasBrasil ? ' group-brasil' : ''}">
@@ -672,7 +708,7 @@ function renderGroups() {
   }).join('');
 }
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── Helpers gerais ────────────────────────────────────────────
 function renderTodayDate() {
   const el = document.getElementById('today-date');
   if (el) el.textContent = new Date().toLocaleDateString('pt-BR', {
@@ -713,7 +749,7 @@ function showToast(msg) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// #10 — WIDGET BRASIL
+// WIDGET BRASIL
 // ══════════════════════════════════════════════════════════════
 function renderBrasilWidget() {
   const widget = document.getElementById('brasil-widget');
@@ -722,20 +758,13 @@ function renderBrasilWidget() {
 
   const allMatches = [...state.matches, ...state.liveMatches];
 
-  // Procura jogo ao vivo do Brasil primeiro
-  let match = allMatches.find(m =>
-    m.highlight && m.status === 'live'
-  );
-
-  // Se não há ao vivo, pega o próximo jogo futuro
+  let match = allMatches.find(m => m.highlight && m.status === 'live');
   if (!match) {
-    const now = new Date().toISOString().slice(0, 10);
     match = allMatches
       .filter(m => m.highlight && m.status === 'upcoming')
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0];
   }
 
-  // Se não há próximo (Copa terminou ou sem dados), oculta widget
   if (!match) {
     widget.style.display = 'none';
     document.body.classList.add('no-widget');
@@ -745,13 +774,11 @@ function renderBrasilWidget() {
   widget.style.display = 'flex';
   document.body.classList.remove('no-widget');
 
-  const isLive     = match.status === 'live';
-  const isFinished = match.status === 'finished';
-  const isBrasil   = (name) => /brasil|brazil/i.test(name);
+  const isLive = match.status === 'live';
+  const isBr   = name => /brasil|brazil/i.test(name);
 
-  // Destaca o lado do Brasil
-  const homeClass = isBrasil(match.home.name) ? 'style="color:var(--green)"' : '';
-  const awayClass = isBrasil(match.away.name) ? 'style="color:var(--green)"' : '';
+  const homeClass = isBr(match.home.name) ? 'style="color:var(--green)"' : '';
+  const awayClass = isBr(match.away.name) ? 'style="color:var(--green)"' : '';
 
   let centerHtml;
   if (match.score) {
@@ -763,14 +790,12 @@ function renderBrasilWidget() {
       </div>
       ${isLive ? `<div class="widget-minute"><span class="pulse-dot" style="display:inline-block;margin-right:4px"></span>${match.minute || 'AO VIVO'}</div>` : ''}`;
   } else {
-    const dateLabel = (() => {
-      const today    = new Date().toISOString().slice(0, 10);
-      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-      if (match.date === today)    return 'Hoje';
-      if (match.date === tomorrow) return 'Amanhã';
-      const d = new Date(match.date + 'T12:00:00');
-      return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-    })();
+    const d = new Date(match.date + 'T12:00:00');
+    const today    = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const dateLabel = match.date === today    ? 'Hoje'
+                    : match.date === tomorrow ? 'Amanhã'
+                    : d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
     centerHtml = `
       <div class="widget-time-box">
         <span class="widget-time">${match.time}</span>
@@ -791,15 +816,13 @@ function renderBrasilWidget() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// #8 — BUSCA GLOBAL
+// BUSCA GLOBAL
 // ══════════════════════════════════════════════════════════════
 function openSearch() {
   const overlay = document.getElementById('search-overlay');
   const input   = document.getElementById('search-input');
   if (!overlay || !input) return;
   overlay.classList.add('open');
-  // iOS Safari só abre o teclado se focus() for chamado de forma SÍNCRONA
-  // dentro do evento de toque/clique do usuário — setTimeout quebra essa cadeia.
   input.focus();
 }
 
@@ -836,7 +859,6 @@ function handleSearch(query) {
   const q = query.trim().toLowerCase();
   if (q.length === 2) gaEvent('search', { search_term: q });
   if (q.length < 2) {
-    // Mostra hint sem apagar o input
     results.innerHTML = `
       <div class="search-hint">
         <div class="hint-icon">🔍</div>
@@ -845,16 +867,14 @@ function handleSearch(query) {
     return;
   }
 
-  const allMatches = [...state.matches].filter(m => {
-    return (
-      m.home.name.toLowerCase().includes(q) ||
-      m.away.name.toLowerCase().includes(q) ||
-      (m.city  || '').toLowerCase().includes(q) ||
-      (m.venue || '').toLowerCase().includes(q) ||
-      m.date.includes(q) ||
-      formatDateLabel(m.date).toLowerCase().includes(q)
-    );
-  }).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const allMatches = [...state.matches].filter(m =>
+    m.home.name.toLowerCase().includes(q) ||
+    m.away.name.toLowerCase().includes(q) ||
+    (m.city  || '').toLowerCase().includes(q) ||
+    (m.venue || '').toLowerCase().includes(q) ||
+    m.date.includes(q) ||
+    formatDateLabel(m.date).toLowerCase().includes(q)
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
   if (!allMatches.length) {
     results.innerHTML = `<div class="search-no-results">😕 Nenhum jogo encontrado para "<strong>${query}</strong>"</div>`;
@@ -863,7 +883,6 @@ function handleSearch(query) {
 
   const byDate = {};
   allMatches.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
-
   results.innerHTML = Object.keys(byDate).sort().map(date =>
     `<div class="date-group">
       <div class="date-label">${formatDateLabel(date)}</div>
@@ -873,18 +892,15 @@ function handleSearch(query) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// #9 — NOTIFICAÇÕES PUSH
+// NOTIFICAÇÕES PUSH
 // ══════════════════════════════════════════════════════════════
 const NOTIF_KEY       = 'copa26_notif';
 const NOTIF_DISMISSED = 'copa26_notif_dismissed';
 
 function initNotifBanner() {
-  // Só mostra se: suporte existe, permissão ainda não decidida, usuário não dispensou
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'default') return;
   if (sessionStorage.getItem(NOTIF_DISMISSED)) return;
-
-  // Mostra o banner depois de 4 segundos (não agride logo de cara)
   setTimeout(() => {
     document.getElementById('notif-banner')?.classList.add('visible');
   }, 4000);
@@ -913,65 +929,45 @@ function dismissNotifBanner() {
 
 function scheduleMatchNotifications() {
   if (Notification.permission !== 'granted') return;
-
-  const brasilMatches = state.matches.filter(m =>
-    m.highlight && m.status === 'upcoming'
-  );
-
+  const brasilMatches = state.matches.filter(m => m.highlight && m.status === 'upcoming');
   brasilMatches.forEach(m => {
     const matchTime = new Date(`${m.date}T${m.time}:00-03:00`).getTime();
-    const notify15  = matchTime - 15 * 60 * 1000; // 15 min antes
+    const notify15  = matchTime - 15 * 60 * 1000;
     const now       = Date.now();
-
     if (notify15 > now) {
-      const delay = notify15 - now;
       setTimeout(() => {
         new Notification('⚽ Brasil joga em 15 minutos!', {
           body: `${m.home.flag} ${m.home.name} × ${m.away.name} ${m.away.flag} · ${m.time} BRT`,
           icon: 'icons/icon-192.png',
           tag:  `match-${m.id}`,
         });
-      }, delay);
+      }, notify15 - now);
     }
   });
 }
 
-// Re-agenda notificações quando dados reais chegam
-const _origFetchAll = fetchAllMatches;
-// (hook leve — scheduleMatchNotifications já verifica permissão)
-function maybeRescheduleNotif() {
-  if (localStorage.getItem(NOTIF_KEY) === '1') scheduleMatchNotifications();
-}
-
 // ══════════════════════════════════════════════════════════════
-// #11 — COMPARTILHAMENTO NATIVO
+// COMPARTILHAMENTO
 // ══════════════════════════════════════════════════════════════
 function shareMatch(matchId) {
   const m = [...state.matches, ...state.liveMatches].find(x => String(x.id) === String(matchId));
   if (!m) return;
-
-  const scoreStr = m.score
-    ? `${m.score.home}–${m.score.away}`
-    : m.time + ' BRT';
-
+  const scoreStr = m.score ? `${m.score.home}–${m.score.away}` : m.time + ' BRT';
   const text = `${m.home.flag} ${m.home.name} ${scoreStr} ${m.away.name} ${m.away.flag}\n📅 ${formatDateLabel(m.date)} · ${m.city || m.venue}\n\n🏆 Copa do Mundo 2026`;
   const url  = window.location.href.split('?')[0];
-
-  gaEvent('share_match', { match_id: String(matchId), teams: m.home.name + ' x ' + m.away.name });
+  gaEvent('share_match', { match_id: String(matchId) });
   if (navigator.share) {
     navigator.share({ title: 'Copa do Mundo 2026', text, url }).catch(() => {});
   } else {
     navigator.clipboard?.writeText(text + '\n' + url).then(() => {
       showToast('📋 Copiado para a área de transferência!');
-    }).catch(() => {
-      showToast('Compartilhamento não suportado neste navegador.');
-    });
+    }).catch(() => showToast('Compartilhamento não suportado neste navegador.'));
   }
 }
+
 // ══════════════════════════════════════════════════════════════
 // FAVORITAR SELEÇÕES
 // ══════════════════════════════════════════════════════════════
-
 function loadFavs() {
   try { return new Set(JSON.parse(localStorage.getItem(FAVS_KEY) || '[]')); }
   catch { return new Set(); }
@@ -982,33 +978,21 @@ function saveFavs() {
 }
 
 function toggleFav(teamName) {
-  if (state.favTeams.has(teamName)) {
-    state.favTeams.delete(teamName);
-    gaEvent('unfavorite_team', { team: teamName });
-  } else {
-    state.favTeams.add(teamName);
-    gaEvent('favorite_team', { team: teamName });
-  }
+  if (state.favTeams.has(teamName)) state.favTeams.delete(teamName);
+  else state.favTeams.add(teamName);
   saveFavs();
   renderFavsModal();
   renderLiveTab();
   renderBrasilWidget();
 }
 
-// Abre modal de seleção de favoritos
-function openFavsModal() {
-  document.getElementById('favs-modal')?.classList.add('open');
-}
-
-function closeFavsModal() {
-  document.getElementById('favs-modal')?.classList.remove('open');
-}
+function openFavsModal()  { document.getElementById('favs-modal')?.classList.add('open'); }
+function closeFavsModal() { document.getElementById('favs-modal')?.classList.remove('open'); }
 
 function renderFavsModal() {
   const grid = document.getElementById('favs-grid');
   if (!grid) return;
 
-  // Coleta todos os times dos grupos
   const allTeams = [];
   Object.keys(GROUPS).sort().forEach(g => {
     GROUPS[g].teams.forEach((team, i) => {
@@ -1025,7 +1009,6 @@ function renderFavsModal() {
     </button>`;
   }).join('');
 
-  // Atualiza contador no botão
   const count = state.favTeams.size;
   const badge = document.getElementById('favs-count');
   if (badge) {
@@ -1034,9 +1017,60 @@ function renderFavsModal() {
   }
 }
 
-// Inicializa modal ao carregar
-function initFavsModal() {
-  renderFavsModal();
+function initFavsModal() { renderFavsModal(); }
+
+// ══════════════════════════════════════════════════════════════
+// MODAL DE DADOS — mostra status da fonte openfootball
+// ══════════════════════════════════════════════════════════════
+function initApiKeyModal() {
+  updateApiKeyStatusDot();
+}
+
+function updateApiKeyStatusDot() {
+  const dot = document.getElementById('apikey-status-dot');
+  if (!dot) return;
+  dot.classList.toggle('connected',  !state.usingDemo);
+  dot.classList.toggle('configured', false);
+}
+
+function openApiKeyModal() {
+  const input = document.getElementById('apikey-input');
+  if (input) {
+    input.value = 'openfootball (sem chave necessária)';
+    input.disabled = true;
+    input.style.opacity = '0.6';
+  }
+  const feedback = document.getElementById('apikey-feedback');
+  if (feedback) {
+    feedback.innerHTML = state.usingDemo
+      ? '📡 Aguardando conexão com o GitHub…'
+      : `✅ Conectado! Fonte: <a href="https://github.com/openfootball/world-cup.json" target="_blank" rel="noopener">openfootball/world-cup.json</a><br><small>Dados gratuitos, sem chave, atualizados pela comunidade.</small>`;
+  }
+  document.getElementById('apikey-modal')?.classList.add('open');
+}
+
+function closeApiKeyModal() {
+  document.getElementById('apikey-modal')?.classList.remove('open');
+  const input = document.getElementById('apikey-input');
+  if (input) { input.disabled = false; input.style.opacity = ''; }
+}
+
+async function saveApiKeyAction() {
+  // Com openfootball não há chave — basta reconectar
+  const feedback = document.getElementById('apikey-feedback');
+  if (feedback) feedback.textContent = '🔄 Buscando dados…';
+  state.usingDemo = true;
+  await fetchLiveData();
+  startAutoRefresh();
+  if (!state.usingDemo) setTimeout(closeApiKeyModal, 800);
+  updateApiKeyStatusDot();
+}
+
+function removeApiKeyAction() {
+  state.usingDemo = true;
+  loadDemoData();
+  updateApiKeyStatusDot();
+  closeApiKeyModal();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1044,33 +1078,24 @@ function initFavsModal() {
 // ══════════════════════════════════════════════════════════════
 function triggerGoalAnimation(matchId) {
   const card = document.querySelector(`[data-match-id="${matchId}"]`);
-  if (!card) return;
+  if (!card || card.classList.contains('goal-flash')) return;
 
-  // Evita duplicar se já está animando
-  if (card.classList.contains('goal-flash')) return;
-
-  // Cria overlay de gol dentro do card
   const overlay = document.createElement('div');
   overlay.className = 'goal-overlay';
-  overlay.innerHTML = `
-    <span class="goal-emoji">⚽</span>
-    <span class="goal-text">GOL!</span>
-  `;
+  overlay.innerHTML = `<span class="goal-emoji">⚽</span><span class="goal-text">GOL!</span>`;
   card.appendChild(overlay);
   card.classList.add('goal-flash');
 
-  // Remove após a animação
   setTimeout(() => {
     card.classList.remove('goal-flash');
     overlay.remove();
   }, 2800);
 
-  // Toast também
   showToast('⚽ GOL!');
 }
 
 // ══════════════════════════════════════════════════════════════
-// GOOGLE ANALYTICS — Eventos customizados
+// GOOGLE ANALYTICS
 // ══════════════════════════════════════════════════════════════
 function gaEvent(name, params = {}) {
   if (typeof gtag === 'function') gtag('event', name, params);
