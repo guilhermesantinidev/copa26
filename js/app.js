@@ -309,6 +309,7 @@ async function fetchLiveData() {
     state.lastUpdate = new Date();
     updateLastUpdateTime();
     updateApiKeyStatusDot();
+    startAutoRefresh(); // recalcula intervalo (dia de jogo vs. normal)
     showToast('✅ Dados atualizados (openfootball)');
   } catch (err) {
     console.warn('[Copa] openfootball falhou:', err.message);
@@ -373,20 +374,20 @@ function updateLiveAndToday() {
 }
 
 // ── Auto Refresh ──────────────────────────────────────────────
+// Openfootball é estático: atualiza a cada 10 min normalmente.
+// Em dias de jogo, tenta a cada 2 min para pegar resultados rápido.
+const REFRESH_NORMAL  = 10 * 60_000;  // 10 min
+const REFRESH_GAMEDAY =  2 * 60_000;  //  2 min (dia com jogos)
+
 function startAutoRefresh() {
   stopAutoRefresh();
-  // Ao vivo: 60s · sem jogos ao vivo: 5 min (respeita 10 req/min free)
-  const interval = state.isLive ? 60_000 : 5 * 60_000;
+  const today = new Date().toISOString().slice(0, 10);
+  const hasGameToday = state.matches.some(m => m.date === today);
+  const interval = hasGameToday ? REFRESH_GAMEDAY : REFRESH_NORMAL;
   state.refreshInterval = setInterval(async () => {
-    if (state.usingDemo) {
-      await fetchLiveData();
-    } else if (state.isLive) {
-      await fetchLiveOnly();
-    } else {
-      await fetchLiveData();
-    }
-    startAutoRefresh();
+    await fetchLiveData();
   }, interval);
+  console.log('[Copa] Auto-refresh a cada ' + (interval / 60_000) + ' min (jogo hoje: ' + hasGameToday + ')');
 }
 
 function stopAutoRefresh() {
@@ -733,11 +734,35 @@ function setLoadingState(on) {
 
 function updateLastUpdateTime() {
   const el = document.getElementById('last-update');
-  if (el && state.lastUpdate) {
-    el.textContent = `Atualizado às ${state.lastUpdate.toLocaleTimeString('pt-BR', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    })}`;
+  if (!el || !state.lastUpdate) return;
+
+  function tick() {
+    if (!state.lastUpdate) return;
+    const diffMs  = Date.now() - state.lastUpdate.getTime();
+    const diffMin = Math.floor(diffMs / 60_000);
+    const diffSec = Math.floor((diffMs % 60_000) / 1000);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const hasGameToday = state.matches.some(m => m.date === today);
+    const nextMin = hasGameToday ? 2 : 10;
+    const remainMs  = (nextMin * 60_000) - diffMs;
+    const remainMin = Math.max(0, Math.floor(remainMs / 60_000));
+    const remainSec = Math.max(0, Math.floor((remainMs % 60_000) / 1000));
+
+    const when = diffMin > 0
+      ? `há ${diffMin}min ${diffSec}s`
+      : `há ${diffSec}s`;
+    const next = remainMs > 0
+      ? ` · próx. em ${remainMin > 0 ? remainMin + 'min ' : ''}${remainSec}s`
+      : ' · atualizando…';
+
+    el.textContent = `Atualizado ${when}${next}`;
   }
+
+  tick();
+  // Limpa ticker anterior e inicia novo
+  if (el._tickerId) clearInterval(el._tickerId);
+  el._tickerId = setInterval(tick, 1000);
 }
 
 function showToast(msg) {
