@@ -88,15 +88,25 @@
       <div class="favs-header">
         <div class="favs-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+<<<<<<< HEAD
           Fonte de dados
         </div>
         <div class="favs-subtitle">
           Dados via <strong>openfootball/world-cup.json</strong> — 100% gratuito, sem chave, sem CORS.<br>
           Atualizado pela comunidade após cada resultado oficial.
+=======
+          Dados ao vivo
+        </div>
+        <div class="favs-subtitle">
+          Dados reais via <strong>football-data.org</strong> — gratuito, CORS liberado, sem proxy.<br>
+          Cadastre-se em <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener">football-data.org</a>
+          e cole seu token abaixo (plano free: 10 req/min).
+>>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
         </div>
         <button class="favs-close" onclick="closeApiKeyModal()" aria-label="Fechar">✕</button>
       </div>
       <div class="apikey-body">
+<<<<<<< HEAD
         <label for="apikey-input" class="apikey-label">Fonte ativa</label>
         <input id="apikey-input" type="text" class="apikey-input" value="openfootball (sem chave necessária)" autocomplete="off" spellcheck="false" readonly style="opacity:.65;cursor:default" />
         <div id="apikey-feedback" class="apikey-feedback"></div>
@@ -104,6 +114,15 @@
       <div class="favs-footer apikey-footer">
         <button class="apikey-remove-btn" onclick="closeApiKeyModal()">Fechar</button>
         <button class="favs-done-btn" onclick="saveApiKeyAction()">🔄 Reconectar</button>
+=======
+        <label for="apikey-input" class="apikey-label">Token football-data.org</label>
+        <input id="apikey-input" type="text" class="apikey-input" placeholder="Cole seu token aqui…" autocomplete="off" spellcheck="false" />
+        <div id="apikey-feedback" class="apikey-feedback"></div>
+      </div>
+      <div class="favs-footer apikey-footer">
+        <button class="apikey-remove-btn" onclick="removeApiKeyAction()">Remover chave</button>
+        <button class="favs-done-btn" onclick="saveApiKeyAction()">Salvar e conectar</button>
+>>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
       </div>
     </div>
   </div>
