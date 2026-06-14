@@ -1,26 +1,14 @@
 // ============================================================
-<<<<<<< HEAD
 // COPA DO MUNDO 2026 — App Principal v6
 // Fonte primária : openfootball/world-cup.json (GitHub)
 //   - 100% gratuito, sem chave, sem CORS
 //   - Atualizado pela comunidade após cada jogo
 //   - URL: raw.githubusercontent.com/openfootball/world-cup.json
 // Fallback       : dados demo (DEMO_MATCHES / GROUPS)
-=======
-// COPA DO MUNDO 2026 — App Principal v5
-// Fonte primária : football-data.org (gratuito, CORS liberado,
-//                  sem proxy, 10 req/min no plano free)
-//   - Competition ID : CWC2026  (a verificar após início)
-//   - Endpoint jogos : /v4/competitions/CWC2026/matches
-//   - Endpoint grupos: /v4/competitions/CWC2026/standings
-// Fallback          : dados demo (DEMO_MATCHES / GROUPS)
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 // ============================================================
 
-const FAVS_KEY   = 'copa26_favs';
-const FDORG_KEY  = 'copa26_fdorg_key';   // chave football-data.org
+const FAVS_KEY = 'copa26_favs';
 
-<<<<<<< HEAD
 // openfootball — fonte de dados principal
 const OFB = {
   url: 'https://raw.githubusercontent.com/openfootball/world-cup.json/master/2026/worldcup.json',
@@ -29,19 +17,6 @@ const OFB = {
 // Stub vazio para manter compatibilidade com initApiKeyModal / modal de chave
 function getApiKey()  { return ''; }
 function setApiKey(k) { /* não usado */ }
-=======
-// football-data.org — Competition code para Copa do Mundo 2026
-const FD = {
-  base:    'https://api.football-data.org/v4',
-  comp:    'WC',       // código oficial; confirmado na API
-};
-
-function getApiKey()   { return localStorage.getItem(FDORG_KEY) || ''; }
-function setApiKey(k)  {
-  if (k) localStorage.setItem(FDORG_KEY, k.trim());
-  else   localStorage.removeItem(FDORG_KEY);
-}
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 
 // ── Mapa de fusos por cidade/estádio ─────────────────────────
 const VENUE_TZ = {
@@ -100,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
-<<<<<<< HEAD
 // OPENFOOTBALL — Camada de dados principal
 // Fonte: github.com/openfootball/world-cup.json
 // 100% gratuito · sem chave · sem CORS · sem proxy
@@ -320,157 +294,6 @@ async function ofbFetch() {
   renderCalendar();
   renderResults();
   renderGroups();
-=======
-// FOOTBALL-DATA.ORG  — Camada de dados principal
-// Plano free: token obrigatório mas gratuito (cadastro rápido),
-// CORS liberado (header X-Auth-Token), 10 req/min.
-// ══════════════════════════════════════════════════════════════
-
-async function fdFetch(path) {
-  const key = getApiKey();
-  const targetUrl = FD.base + path;
-
-  // Proxies CORS para contornar restrição do plano free do football-data.org
-  const PROXIES = [
-    url => url,                                                        // direto
-    url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,    // proxy 1
-    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, // proxy 2
-  ];
-
-  let lastErr;
-  for (const proxyFn of PROXIES) {
-    const reqUrl = proxyFn(targetUrl);
-    const headers = { 'Accept': 'application/json' };
-    if (key) headers['X-Auth-Token'] = key;
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      let res;
-      try {
-        res = await fetch(reqUrl, { headers, signal: ctrl.signal });
-      } finally {
-        clearTimeout(timer);
-      }
-      console.log(`[Copa] ${reqUrl === targetUrl ? 'direto' : 'proxy'} ${path} → HTTP ${res.status}`);
-      if (res.status === 400) throw new Error('Competição ainda não disponível na API (400)');
-      if (res.status === 401) throw new Error('Token inválido (401) — verifique sua chave');
-      if (res.status === 403) throw new Error('Acesso negado (403) — plano free não cobre este endpoint');
-      if (res.status === 429) throw new Error('Limite atingido (429) — aguarde um minuto');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    } catch (err) {
-      if (err.message.match(/Token|Acesso|Competição|Limite/)) throw err;
-      console.warn(`[Copa] falhou (${err.message}), tentando próximo...`);
-      lastErr = err;
-    }
-  }
-  throw lastErr;
-}
-
-// ── Busca todos os jogos ──────────────────────────────────────
-async function fdFetchMatches() {
-  // /v4/competitions/WC/matches retorna todos os jogos da competição
-  const data = await fdFetch(`/competitions/${FD.comp}/matches`);
-  const matches = data.matches || [];
-  if (!matches.length) throw new Error('football-data.org: nenhum jogo retornado');
-
-  state.matches = matches.map(normalizeFD);
-  console.log(`[Copa] football-data.org: ${state.matches.length} jogos`);
-  renderCalendar();
-  renderResults();
-}
-
-// ── Busca classificação dos grupos ────────────────────────────
-async function fdFetchStandings() {
-  try {
-    const data = await fdFetch(`/competitions/${FD.comp}/standings`);
-    const sectionGroups = (data.standings || []).filter(s => s.type === 'TOTAL');
-
-    if (!sectionGroups.length) return;
-
-    const standings = {};
-    sectionGroups.forEach(section => {
-      // group field ex: "GROUP_A"
-      const letter = (section.group || '').replace(/^GROUP_/, '').toUpperCase();
-      if (!letter || letter.length > 2) return;
-      standings[letter] = (section.table || []).map(row => {
-        const name = row.team?.name || '?';
-        return {
-          team:   name,
-          flag:   getFlag(name),
-          played: row.playedGames || 0,
-          won:    row.won         || 0,
-          drawn:  row.draw        || 0,
-          lost:   row.lost        || 0,
-          gf:     row.goalsFor    || 0,
-          ga:     row.goalsAgainst|| 0,
-          gd:     row.goalDifference || 0,
-          points: row.points      || 0,
-        };
-      });
-    });
-
-    if (Object.keys(standings).length) {
-      state.standings = standings;
-      renderGroups();
-    }
-  } catch (err) {
-    console.warn('[Copa] fdFetchStandings:', err.message);
-  }
-}
-
-// ── Normaliza jogo football-data.org → formato interno ────────
-function normalizeFD(m) {
-  const homeName = m.homeTeam?.name || m.homeTeam?.shortName || '?';
-  const awayName = m.awayTeam?.name || m.awayTeam?.shortName || '?';
-
-  const startDate = new Date(m.utcDate || Date.now());
-  const dateStr   = startDate.toISOString().slice(0, 10);
-  const timeStr   = startDate.toLocaleTimeString('pt-BR', {
-    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
-  });
-
-  // Status: SCHEDULED, TIMED, IN_PLAY, PAUSED, FINISHED, SUSPENDED, POSTPONED
-  const rawStatus = m.status || 'SCHEDULED';
-  let status = 'upcoming';
-  if (['IN_PLAY', 'PAUSED', 'LIVE'].includes(rawStatus))   status = 'live';
-  else if (['FINISHED', 'AWARDED'].includes(rawStatus))     status = 'finished';
-
-  // Placar — fullTime para encerrados, score para ao vivo
-  const sc = m.score || {};
-  const hs  = sc.fullTime?.home  ?? sc.halfTime?.home  ?? null;
-  const as_ = sc.fullTime?.away  ?? sc.halfTime?.away  ?? null;
-  const hasScore = hs !== null && status !== 'upcoming';
-
-  // Minuto ao vivo: football-data não retorna minuto no plano free
-  const minute = status === 'live'
-    ? (rawStatus === 'PAUSED' ? 'Intervalo' : 'AO VIVO')
-    : null;
-
-  // Grupo / fase a partir de stage e group
-  const stage    = m.stage || '';
-  const groupRaw = m.group || '';                 // ex: "GROUP_A"
-  const groupM   = groupRaw.match(/([A-L])$/i);
-  const group    = groupM ? groupM[1].toUpperCase() : null;
-
-  return {
-    id:        m.id,
-    group,
-    phase:     detectPhase(stage),
-    highlight: /brazil|brasil/i.test(homeName) || /brazil|brasil/i.test(awayName),
-    home: { name: homeName, flag: getFlag(homeName), code: m.homeTeam?.tla || homeName.slice(0,3).toUpperCase() },
-    away: { name: awayName, flag: getFlag(awayName), code: m.awayTeam?.tla || awayName.slice(0,3).toUpperCase() },
-    date:     dateStr,
-    time:     timeStr,
-    timezone: 'BRT',
-    venue:    m.venue || '',
-    city:     '',
-    status,
-    score:    hasScore ? { home: Number(hs), away: Number(as_) } : null,
-    minute,
-    events:   [],
-  };
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 }
 
 // ── Busca principal (orquestrador) ────────────────────────────
@@ -480,19 +303,12 @@ async function fetchLiveData() {
 
   try {
     setLoadingState(true);
-<<<<<<< HEAD
     await ofbFetch();
-=======
-
-    await fdFetchMatches();
-    await fdFetchStandings();
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
     updateLiveAndToday();
     state.usingDemo  = false;
     state.lastUpdate = new Date();
     updateLastUpdateTime();
     updateApiKeyStatusDot();
-<<<<<<< HEAD
     showToast('✅ Dados atualizados (openfootball)');
   } catch (err) {
     console.warn('[Copa] openfootball falhou:', err.message);
@@ -500,15 +316,6 @@ async function fetchLiveData() {
       showToast('📡 Modo demonstração (sem conexão)');
     } else {
       showToast('⚠️ Erro ao buscar dados: ' + err.message);
-=======
-    showToast('✅ Dados conectados (football-data.org)');
-  } catch (err) {
-    console.warn('[Copa] football-data.org falhou:', err.message);
-    if (!state.usingDemo) {
-      showToast('⚠️ ' + err.message);
-    } else {
-      showToast('📡 Modo demonstração — configure sua chave gratuita');
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
     }
     updateApiKeyStatusDot();
   } finally {
@@ -517,19 +324,10 @@ async function fetchLiveData() {
   }
 }
 
-<<<<<<< HEAD
 // ── Atualização leve (ao vivo) ────────────────────────────────
 async function fetchLiveOnly() {
   try {
     await ofbFetch();
-=======
-// ── Atualização leve (só jogos ao vivo) ───────────────────────
-async function fetchLiveOnly() {
-  try {
-    // football-data não tem endpoint /matches?status=live no free;
-    // buscamos todos e filtramos — a resposta é cacheada no servidor por ~1 min
-    await fdFetchMatches();
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
     updateLiveAndToday();
     state.lastUpdate = new Date();
     updateLastUpdateTime();
@@ -538,21 +336,6 @@ async function fetchLiveOnly() {
   }
 }
 
-<<<<<<< HEAD
-=======
-// ── Detecta fase a partir do campo stage ─────────────────────
-function detectPhase(stage) {
-  const s = (stage || '').toLowerCase();
-  if (s.includes('group'))                              return 'grupos';
-  if (s.includes('round_of_32') || s.includes('32'))   return 'oitavas';
-  if (s.includes('round_of_16') || s.includes('16'))   return 'oitavas';
-  if (s.includes('quarter'))                            return 'quartas';
-  if (s.includes('semi'))                               return 'semi';
-  if (s.includes('3rd') || s.includes('third'))        return 'terceiro';
-  if (s.includes('final'))                              return 'final';
-  return 'grupos';
-}
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 
 // ── Atualiza ao vivo / hoje a partir de state.matches ────────
 function updateLiveAndToday() {
@@ -602,13 +385,7 @@ function startAutoRefresh() {
     } else {
       await fetchLiveData();
     }
-<<<<<<< HEAD
     startAutoRefresh();
-=======
-    // Reajusta intervalo se o estado ao vivo mudou (sem criar timer extra)
-    const newInterval = state.isLive ? 60_000 : 5 * 60_000;
-    if (newInterval !== interval) startAutoRefresh();
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
   }, interval);
 }
 
@@ -1243,11 +1020,7 @@ function renderFavsModal() {
 function initFavsModal() { renderFavsModal(); }
 
 // ══════════════════════════════════════════════════════════════
-<<<<<<< HEAD
 // MODAL DE DADOS — mostra status da fonte openfootball
-=======
-// CONFIGURAÇÃO DA CHAVE — football-data.org
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 // ══════════════════════════════════════════════════════════════
 function initApiKeyModal() {
   updateApiKeyStatusDot();
@@ -1256,18 +1029,12 @@ function initApiKeyModal() {
 function updateApiKeyStatusDot() {
   const dot = document.getElementById('apikey-status-dot');
   if (!dot) return;
-<<<<<<< HEAD
   dot.classList.toggle('connected',  !state.usingDemo);
   dot.classList.toggle('configured', false);
-=======
-  dot.classList.toggle('connected',  !!getApiKey() && !state.usingDemo);
-  dot.classList.toggle('configured', !!getApiKey() &&  state.usingDemo);
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 }
 
 function openApiKeyModal() {
   const input = document.getElementById('apikey-input');
-<<<<<<< HEAD
   if (input) {
     input.value = 'openfootball (sem chave necessária)';
     input.disabled = true;
@@ -1279,17 +1046,11 @@ function openApiKeyModal() {
       ? '📡 Aguardando conexão com o GitHub…'
       : `✅ Conectado! Fonte: <a href="https://github.com/openfootball/world-cup.json" target="_blank" rel="noopener">openfootball/world-cup.json</a><br><small>Dados gratuitos, sem chave, atualizados pela comunidade.</small>`;
   }
-=======
-  if (input) input.value = getApiKey();
-  const feedback = document.getElementById('apikey-feedback');
-  if (feedback) feedback.innerHTML = '';
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
   document.getElementById('apikey-modal')?.classList.add('open');
 }
 
 function closeApiKeyModal() {
   document.getElementById('apikey-modal')?.classList.remove('open');
-<<<<<<< HEAD
   const input = document.getElementById('apikey-input');
   if (input) { input.disabled = false; input.style.opacity = ''; }
 }
@@ -1302,56 +1063,14 @@ async function saveApiKeyAction() {
   await fetchLiveData();
   startAutoRefresh();
   if (!state.usingDemo) setTimeout(closeApiKeyModal, 800);
-=======
-}
-
-async function saveApiKeyAction() {
-  const input    = document.getElementById('apikey-input');
-  const feedback = document.getElementById('apikey-feedback');
-  const key      = (input?.value || '').trim();
-
-  if (!key) {
-    if (feedback) feedback.textContent = '⚠️ Cole uma chave válida.';
-    return;
-  }
-
-  setApiKey(key);
-  if (feedback) feedback.textContent = '🔄 Verificando chave football-data.org…';
-
-  try {
-    // Testa a chave buscando informações da competição
-    const data = await fdFetch(`/competitions/${FD.comp}`);
-    const name = data.name || 'Copa do Mundo';
-    if (feedback) feedback.textContent = `✅ Conectado! ${name}`;
-    state.usingDemo = true; // força re-fetch completo
-    await fetchLiveData();
-    startAutoRefresh();
-    setTimeout(closeApiKeyModal, 1200);
-  } catch (err) {
-    if (feedback) feedback.innerHTML =
-      `⚠️ ${err.message}<br><small>Cadastre-se gratuitamente em <a href="https://www.football-data.org/client/register" target="_blank" rel="noopener">football-data.org</a> para obter seu token.</small>`;
-  }
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
   updateApiKeyStatusDot();
 }
 
 function removeApiKeyAction() {
-<<<<<<< HEAD
   state.usingDemo = true;
   loadDemoData();
   updateApiKeyStatusDot();
   closeApiKeyModal();
-=======
-  setApiKey('');
-  const input    = document.getElementById('apikey-input');
-  if (input) input.value = '';
-  const feedback = document.getElementById('apikey-feedback');
-  if (feedback) feedback.textContent = 'Chave removida. Voltando para modo demonstração.';
-  state.usingDemo = true;
-  stopAutoRefresh();
-  loadDemoData();
-  updateApiKeyStatusDot();
->>>>>>> 636d384ca377c4e7f3e74129419b3a7c0a6f93e3
 }
 
 // ══════════════════════════════════════════════════════════════
